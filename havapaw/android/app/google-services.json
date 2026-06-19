@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "90532665779",
+    "project_id": "havapaw-11e23",
+    "storage_bucket": "havapaw-11e23.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:90532665779:android:dd26becfdb80946b8013c6",
+        "android_client_info": {
+          "package_name": "com.example.havapaw"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbSg4IpePxsttJGygiTM7S5hkBOvrazz0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
