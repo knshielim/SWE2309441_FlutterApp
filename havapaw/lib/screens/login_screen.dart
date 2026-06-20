@@ -83,11 +83,14 @@ class _LoginScreenState extends State<LoginScreen> {
               if (formKey.currentState!.validate()) {
                 try {
                   await _authService.resetPassword(email: emailController.text.trim());
+                  if (!mounted) return;
                   Navigator.pop(dialogContext);
+                  if (!mounted) return;
                   ScaffoldMessenger.of(dialogContext).showSnackBar(
                     SnackBar(content: Text('password_reset_sent'.tr())),
                   );
                 } catch (e) {
+                  if (!mounted) return;
                   ScaffoldMessenger.of(dialogContext).showSnackBar(
                     SnackBar(content: Text('error: ${e.toString()}')),
                   );

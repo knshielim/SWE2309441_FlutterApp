@@ -37,9 +37,11 @@ class _LanguageScreenState extends State<LanguageScreen> {
     await prefs.setString('language_code', code);
     if (!mounted) return;
     await context.setLocale(locale);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('language'.tr())),
     );
+    if (!mounted) return;
     Navigator.pop(context);
   }
 

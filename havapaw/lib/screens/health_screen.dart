@@ -379,7 +379,7 @@ class _HealthContent extends StatelessWidget {
                   }
                   
                   final medications = snapshot.data!.docs
-                      .map((doc) => Medication.fromMap(doc.data(), doc.id))
+                      .map((doc) => Medication.fromMap(doc.data() as Map<String, dynamic>, doc.id))
                       .toList();
                   
                   return Column(
