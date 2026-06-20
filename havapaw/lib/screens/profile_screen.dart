@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'dart:convert';
 import '../theme/app_theme.dart';
@@ -33,7 +34,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (pet == null) {
             await _petService.addPet(newPet);
           } else {
-            await _petService.updatePet(pet.id, newPet.toMap());
+            await _petService.updatePet(pet.id ?? '', newPet.toMap());
           }
           if (mounted) Navigator.pop(context);
         },
@@ -126,10 +127,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           if (details.primaryVelocity != null) {
                             if (details.primaryVelocity! > 0) {
                               // Swipe right - go to previous
-                              setState(() => _activePetIndex = (_activePetIndex - 1 + pets.length) % pets.length);
+                              setState(() => _activePetIndex = ((_activePetIndex - 1 + pets.length) % pets.length).toInt());
                             } else {
                               // Swipe left - go to next
-                              setState(() => _activePetIndex = (_activePetIndex + 1) % pets.length);
+                              setState(() => _activePetIndex = ((_activePetIndex + 1) % pets.length).toInt());
                             }
                           }
                         },
@@ -137,8 +138,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           pet: pets[_activePetIndex],
                           totalPets: pets.length,
                           currentIndex: _activePetIndex,
-                          onPrev: () { setState(() => _activePetIndex = (_activePetIndex - 1 + pets.length) % pets.length); },
-                          onNext: () { setState(() => _activePetIndex = (_activePetIndex + 1) % pets.length); },
+                          onPrev: () { setState(() => _activePetIndex = ((_activePetIndex - 1 + pets.length) % pets.length).toInt()); },
+                          onNext: () { setState(() => _activePetIndex = ((_activePetIndex + 1) % pets.length).toInt()); },
                           onEdit: () => _showPetForm(pet: pets[_activePetIndex]),
                         ),
                       ),

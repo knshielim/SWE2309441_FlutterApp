@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/watch_data_service.dart';
 import '../services/pet_service.dart';
@@ -50,13 +51,15 @@ class _MapScreenState extends State<MapScreen> {
             const SizedBox(height: 20),
 
             // Safe zone toggle
-            StreamBuilder<List<Pet>>(
-              stream: _petService.getPets(),
+            StreamBuilder<QuerySnapshot>(
+              stream: _petService.getPetsStream(),
               builder: (context, petSnapshot) {
-                final pets = petSnapshot.data ?? [];
-                if (pets.isEmpty) {
+                if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
                   return const SizedBox.shrink();
                 }
+                final pets = petSnapshot.data!.docs
+                    .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+                    .toList();
                 if (_activePetIndex >= pets.length) _activePetIndex = 0;
                 final pet = pets[_activePetIndex];
                 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import '../widgets/bottom_nav.dart';
 import '../theme/app_theme.dart';
@@ -148,16 +149,18 @@ class _HomeTabState extends State<_HomeTab> {
             const SizedBox(height: 20),
 
             // Pet card
-            StreamBuilder<List<Pet>>(
-              stream: _petService.getPets(),
+            StreamBuilder<QuerySnapshot>(
+              stream: _petService.getPetsStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: AppColors.primaryTeal));
                 }
-                final pets = snapshot.data ?? [];
-                if (pets.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return _EmptyPetCard();
                 }
+                final pets = snapshot.data!.docs
+                    .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+                    .toList();
                 if (_activePetIndex >= pets.length) _activePetIndex = 0;
                 final pet = pets[_activePetIndex];
                 return GestureDetector(

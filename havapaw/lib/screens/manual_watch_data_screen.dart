@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/bluetooth_service.dart';
 import '../models/watch_data.dart';
@@ -45,7 +46,10 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
   }
 
   Future<void> _loadPets() async {
-    final pets = await _petService.getPets().first;
+    final snapshot = await _petService.getPetsStream().first;
+    final pets = snapshot.docs
+        .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
     if (mounted) {
       setState(() {
         _pets = pets;

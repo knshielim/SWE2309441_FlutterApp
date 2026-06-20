@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/watch_data_service.dart';
 import '../services/pet_service.dart';
@@ -38,7 +39,7 @@ class _HealthScreenState extends State<HealthScreen> {
           if (medication == null) {
             await _medicationService.addMedication(newMedication);
           } else {
-            await _medicationService.updateMedication(medication.id, newMedication.toMap());
+            await _medicationService.updateMedication(medication.id ?? '', newMedication.toMap());
           }
           if (mounted) Navigator.pop(context);
         },
@@ -83,11 +84,10 @@ class _HealthScreenState extends State<HealthScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header with pet name
-            StreamBuilder<List<Pet>>(
-              stream: _petService.getPets(),
+            StreamBuilder<QuerySnapshot>(
+              stream: _petService.getPetsStream(),
               builder: (context, petSnapshot) {
-                final pets = petSnapshot.data ?? [];
-                if (pets.isEmpty) {
+                if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -101,6 +101,9 @@ class _HealthScreenState extends State<HealthScreen> {
                     ],
                   );
                 }
+                final pets = petSnapshot.data!.docs
+                    .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+                    .toList();
                 if (_activePetIndex >= pets.length) _activePetIndex = 0;
                 final pet = pets[_activePetIndex];
                 final petId = pet.id ?? '';
