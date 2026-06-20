@@ -35,8 +35,8 @@ class _LanguageScreenState extends State<LanguageScreen> {
   Future<void> _saveLanguage(String code, Locale locale) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('language_code', code);
-    await context.setLocale(locale);
     if (mounted) {
+      await context.setLocale(locale);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('language'.tr())),
       );

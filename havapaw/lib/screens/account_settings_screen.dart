@@ -93,7 +93,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       await user.reauthenticateWithCredential(credential);
       
       // Update email
-      await user.updateEmail(_emailCtrl.text.trim());
+      await user.verifyBeforeUpdateEmail(_emailCtrl.text.trim());
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -228,7 +228,11 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
             ),
             validator: (v) {
               if (v == null || v.isEmpty) return 'required'.tr();
-              if (v.length < 6) return 'password_min_length'.tr();
+              if (v == _currentPasswordCtrl.text) return 'New password must be different from current password';
+              if (v.length < 8) return 'Password must be at least 8 characters';
+              if (!v.contains(RegExp(r'[A-Z]'))) return 'Password must contain at least one uppercase letter';
+              if (!v.contains(RegExp(r'[a-z]'))) return 'Password must contain at least one lowercase letter';
+              if (!v.contains(RegExp(r'[0-9]'))) return 'Password must contain at least one number';
               return null;
             },
           ),
@@ -285,8 +289,10 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
               prefixIcon: const Icon(Icons.email_rounded, color: AppColors.textGrey),
             ),
             validator: (v) {
-              if (v == null || v.isEmpty) return 'required'.tr();
-              if (!v.contains('@')) return 'invalid_email'.tr();
+              if (v == null || v.trim().isEmpty) return 'required'.tr();
+              final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+              if (!emailRegex.hasMatch(v.trim())) return 'invalid_email'.tr();
+              if (v.trim() == _auth.currentUser?.email) return 'New email must be different from current email';
               return null;
             },
           ),

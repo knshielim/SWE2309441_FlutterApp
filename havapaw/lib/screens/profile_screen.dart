@@ -33,7 +33,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (pet == null) {
             await _petService.addPet(newPet);
           } else {
-            await _petService.updatePet(newPet);
+            await _petService.updatePet(pet.id, newPet.toMap());
           }
           if (mounted) Navigator.pop(context);
         },
@@ -94,19 +94,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 20),
  
             // Pet section
-            StreamBuilder<List<Pet>>(
-              stream: _petService.getPets(),
+            StreamBuilder<QuerySnapshot>(
+              stream: _petService.getPetsStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: AppColors.primaryTeal));
                 }
-                final pets = snapshot.data ?? [];
+                if (snapshot.hasError) {
+                  return const Center(child: Text('Error loading pets'));
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('No pets found yet.'));
+                }
+
+                final pets = snapshot.data!.docs
+                    .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+                    .toList();
+
                 if (_activePetIndex >= pets.length && pets.isNotEmpty) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     setState(() => _activePetIndex = pets.length - 1);
                   });
                 }
- 
+
                 return Column(
                   children: [
                     // Pet navigation header
@@ -133,7 +143,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
- 
+
                       // Pet details table
                       _DetailsCard(pet: pets[_activePetIndex]),
                       const SizedBox(height: 14),
@@ -557,7 +567,6 @@ class _PetFormSheet extends StatefulWidget {
 class _PetFormSheetState extends State<_PetFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl;
-  late TextEditingController _breedCtrl;
   late TextEditingController _birthdayCtrl;
   late TextEditingController _weightCtrl;
   late TextEditingController _lengthCtrl;
@@ -751,7 +760,11 @@ class _PetFormSheetState extends State<_PetFormSheet> {
               TextFormField(
                 controller: _nameCtrl,
                 decoration: InputDecoration(hintText: 'pet_name_hint'.tr(), prefixIcon: const Icon(Icons.pets, color: AppColors.textGrey)),
-                validator: (v) => v == null || v.isEmpty ? 'name_required'.tr() : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'name_required'.tr();
+                  if (v.trim().length < 2) return 'Name must be at least 2 characters';
+                  return null;
+                },
               ),
               const SizedBox(height: 14),
  
@@ -781,7 +794,7 @@ class _PetFormSheetState extends State<_PetFormSheet> {
               _label('breed'.tr()),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
-                value: _selectedBreed,
+                initialValue: _selectedBreed,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: AppColors.cardWhite,
@@ -808,6 +821,7 @@ class _PetFormSheetState extends State<_PetFormSheet> {
                     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     prefixIcon: const Icon(Icons.cake_rounded, color: AppColors.textGrey),
+                    errorText: _birthdayCtrl.text.isEmpty ? 'Birthday is required' : null,
                   ),
                   child: Text(
                     _birthdayCtrl.text.isEmpty ? 'select_birthday'.tr() : _birthdayCtrl.text,
@@ -839,6 +853,13 @@ class _PetFormSheetState extends State<_PetFormSheet> {
                       controller: _weightCtrl,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(hintText: 'weight_hint'.tr()),
+                      validator: (v) {
+                        if (v != null && v.isNotEmpty) {
+                          final weight = double.tryParse(v);
+                          if (weight == null || weight <= 0) return 'Invalid weight';
+                        }
+                        return null;
+                      },
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -847,6 +868,13 @@ class _PetFormSheetState extends State<_PetFormSheet> {
                       controller: _lengthCtrl,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(hintText: 'length_hint'.tr()),
+                      validator: (v) {
+                        if (v != null && v.isNotEmpty) {
+                          final length = double.tryParse(v);
+                          if (length == null || length <= 0) return 'Invalid length';
+                        }
+                        return null;
+                      },
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -855,6 +883,13 @@ class _PetFormSheetState extends State<_PetFormSheet> {
                       controller: _heightCtrl,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(hintText: 'height_hint'.tr()),
+                      validator: (v) {
+                        if (v != null && v.isNotEmpty) {
+                          final height = double.tryParse(v);
+                          if (height == null || height <= 0) return 'Invalid height';
+                        }
+                        return null;
+                      },
                     ),
                   ),
                 ],

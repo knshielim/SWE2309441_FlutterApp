@@ -6,91 +6,47 @@ class MedicationService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Get all medications for current user
-  Stream<List<Medication>> getMedications() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value([]);
-    
-    return _db
-        .collection('users')
-        .doc(uid)
-        .collection('medications')
-        .orderBy('startDate', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => Medication.fromMap(doc.data(), doc.id))
-            .toList());
+  String get _uid => _auth.currentUser!.uid;
+
+  CollectionReference get _medicationsRef =>
+      _db.collection('users').doc(_uid).collection('medications');
+
+  // Add a new medication (Create)
+  Future<void> addMedication(Medication medication) async {
+    await _medicationsRef.add({
+      ...medication.toMap(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  // Get medications for a specific pet
-  Stream<List<Medication>> getMedicationsForPet(String petId) {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value([]);
-    
-    return _db
-        .collection('users')
-        .doc(uid)
-        .collection('medications')
+  // Read all medications (Stream for real-time updates)
+  Stream<QuerySnapshot> getMedicationsStream() {
+    return _medicationsRef.orderBy('startDate', descending: true).snapshots();
+  }
+
+  // Read medications for a specific pet (Stream for real-time updates)
+  Stream<QuerySnapshot> getMedicationsForPetStream(String petId) {
+    return _medicationsRef
         .where('petId', isEqualTo: petId)
         .orderBy('startDate', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => Medication.fromMap(doc.data(), doc.id))
-            .toList());
+        .snapshots();
   }
 
-  // Add a new medication
-  Future<void> addMedication(Medication medication) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-    
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('medications')
-        .add(medication.toMap())
-        .timeout(const Duration(seconds: 10));
+  // Edit an existing medication (Update)
+  Future<void> updateMedication(String medicationId, Map<String, dynamic> data) async {
+    await _medicationsRef.doc(medicationId).update({
+      ...data,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  // Update an existing medication
-  Future<void> updateMedication(Medication medication) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null || medication.id == null) return;
-    
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('medications')
-        .doc(medication.id)
-        .update(medication.toMap())
-        .timeout(const Duration(seconds: 10));
-  }
-
-  // Delete a medication
+  // Remove a medication (Delete)
   Future<void> deleteMedication(String medicationId) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-    
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('medications')
-        .doc(medicationId)
-        .delete()
-        .timeout(const Duration(seconds: 10));
+    await _medicationsRef.doc(medicationId).delete();
   }
 
   // Toggle medication active status
   Future<void> toggleMedicationStatus(String medicationId, bool isActive) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-    
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('medications')
-        .doc(medicationId)
-        .update({'isActive': isActive})
-        .timeout(const Duration(seconds: 10));
+    await _medicationsRef.doc(medicationId).update({'isActive': isActive});
   }
 }

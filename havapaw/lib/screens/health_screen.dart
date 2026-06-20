@@ -38,7 +38,7 @@ class _HealthScreenState extends State<HealthScreen> {
           if (medication == null) {
             await _medicationService.addMedication(newMedication);
           } else {
-            await _medicationService.updateMedication(newMedication);
+            await _medicationService.updateMedication(medication.id, newMedication.toMap());
           }
           if (mounted) Navigator.pop(context);
         },
@@ -323,8 +323,8 @@ class _HealthContent extends StatelessWidget {
                 ),
               )
             else
-              StreamBuilder<List<Medication>>(
-                stream: medicationService.getMedicationsForPet(petId),
+              StreamBuilder<QuerySnapshot>(
+                stream: medicationService.getMedicationsForPetStream(petId),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
@@ -355,8 +355,7 @@ class _HealthContent extends StatelessWidget {
                     );
                   }
                   
-                  final medications = snapshot.data ?? [];
-                  if (medications.isEmpty) {
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return _InfoCard(
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -375,6 +374,11 @@ class _HealthContent extends StatelessWidget {
                       ),
                     );
                   }
+                  
+                  final medications = snapshot.data!.docs
+                      .map((doc) => Medication.fromMap(doc.data(), doc.id))
+                      .toList();
+                  
                   return Column(
                     children: medications.map((med) => _MedicationCard(
                       medication: med,
@@ -759,7 +763,11 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
                   hintText: 'medication_name_hint'.tr(),
                   prefixIcon: const Icon(Icons.medication_rounded, color: AppColors.textGrey),
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'required'.tr() : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'required'.tr();
+                  if (v.trim().length < 2) return 'Name must be at least 2 characters';
+                  return null;
+                },
               ),
               const SizedBox(height: 14),
 
@@ -770,12 +778,16 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
                   hintText: 'dosage_hint'.tr(),
                   prefixIcon: const Icon(Icons.science_rounded, color: AppColors.textGrey),
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'required'.tr() : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'required'.tr();
+                  if (v.trim().length < 2) return 'Dosage must be at least 2 characters';
+                  return null;
+                },
               ),
               const SizedBox(height: 14),
 
               DropdownButtonFormField<String>(
-                value: _frequencyCtrl.text.isEmpty ? null : _frequencyCtrl.text,
+                initialValue: _frequencyCtrl.text.isEmpty ? null : _frequencyCtrl.text,
                 decoration: InputDecoration(
                   labelText: 'frequency'.tr(),
                   prefixIcon: const Icon(Icons.schedule_rounded, color: AppColors.textGrey),
@@ -792,6 +804,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
                   decoration: InputDecoration(
                     labelText: 'start_date'.tr(),
                     prefixIcon: const Icon(Icons.calendar_today_rounded, color: AppColors.textGrey),
+                    errorText: _startDate == null ? 'Start date is required' : null,
                   ),
                   child: Text(
                     _startDate != null ? '${_startDate!.year}-${_startDate!.month.toString().padLeft(2, '0')}-${_startDate!.day.toString().padLeft(2, '0')}' : 'select_start_date'.tr(),

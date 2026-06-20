@@ -120,7 +120,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.lightTeal,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.primaryTeal.withOpacity(0.3)),
+                    border: Border.all(color: AppColors.primaryTeal.withValues(alpha: 0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,7 +153,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                   _label('Select Pet'),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: _selectedPetId,
+                    initialValue: _selectedPetId,
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: AppColors.cardWhite,
@@ -188,7 +188,12 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                     hintText: 'e.g. 7500',
                     prefixIcon: Icon(Icons.directions_walk_rounded, color: AppColors.textGrey),
                   ),
-                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    final steps = int.tryParse(v);
+                    if (steps == null || steps < 0) return 'Invalid steps value';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
 
@@ -202,6 +207,13 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                     hintText: 'e.g. 85',
                     prefixIcon: Icon(Icons.favorite_rounded, color: AppColors.textGrey),
                   ),
+                  validator: (v) {
+                    if (v != null && v.isNotEmpty) {
+                      final heartRate = int.tryParse(v);
+                      if (heartRate == null || heartRate < 0 || heartRate > 250) return 'Invalid heart rate (0-250)';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
 
@@ -215,6 +227,13 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                     hintText: 'e.g. 5.2',
                     prefixIcon: Icon(Icons.straighten_rounded, color: AppColors.textGrey),
                   ),
+                  validator: (v) {
+                    if (v != null && v.isNotEmpty) {
+                      final distance = double.tryParse(v);
+                      if (distance == null || distance < 0) return 'Invalid distance value';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
 
@@ -228,6 +247,13 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                     hintText: 'e.g. 350',
                     prefixIcon: Icon(Icons.local_fire_department_rounded, color: AppColors.textGrey),
                   ),
+                  validator: (v) {
+                    if (v != null && v.isNotEmpty) {
+                      final calories = int.tryParse(v);
+                      if (calories == null || calories < 0) return 'Invalid calories value';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
 
@@ -241,6 +267,13 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                     hintText: 'e.g. 36.5',
                     prefixIcon: Icon(Icons.thermostat_rounded, color: AppColors.textGrey),
                   ),
+                  validator: (v) {
+                    if (v != null && v.isNotEmpty) {
+                      final temp = double.tryParse(v);
+                      if (temp == null || temp < 30 || temp > 45) return 'Invalid temperature (30-45°C)';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 24),
 

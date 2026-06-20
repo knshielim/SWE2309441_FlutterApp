@@ -11,6 +11,7 @@ import '../models/watch_data.dart';
 import 'health_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
+import 'account_settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -124,15 +125,21 @@ class _HomeTabState extends State<_HomeTab> {
                     ],
                   ),
                 ),
-                CircleAvatar(
-                  backgroundColor: AppColors.lightTeal,
-                  radius: 22,
-                  child: Text(
-                    firstName.isNotEmpty ? firstName[0].toUpperCase() : 'U',
-                    style: const TextStyle(
-                      color: AppColors.primaryTeal,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 18,
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AccountSettingsScreen()),
+                  ),
+                  child: CircleAvatar(
+                    backgroundColor: AppColors.lightTeal,
+                    radius: 22,
+                    child: Text(
+                      firstName.isNotEmpty ? firstName[0].toUpperCase() : 'U',
+                      style: const TextStyle(
+                        color: AppColors.primaryTeal,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                      ),
                     ),
                   ),
                 ),
@@ -458,7 +465,7 @@ class _EmptyPetCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.lightTeal,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primaryTeal.withOpacity(0.3)),
+        border: Border.all(color: AppColors.primaryTeal.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [

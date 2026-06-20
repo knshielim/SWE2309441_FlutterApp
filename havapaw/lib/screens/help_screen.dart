@@ -186,7 +186,7 @@ class _FaqTileState extends State<_FaqTile> {
       decoration: BoxDecoration(
         color: AppColors.cardWhite,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _expanded ? AppColors.primaryTeal.withOpacity(0.4) : AppColors.divider),
+        border: Border.all(color: _expanded ? AppColors.primaryTeal.withValues(alpha: 0.4) : AppColors.divider),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),

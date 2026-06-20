@@ -11,38 +11,28 @@ class PetService {
   CollectionReference get _petsRef =>
       _db.collection('users').doc(_uid).collection('pets');
 
-  // CREATE — Add a new pet
+  // Add a new pet (Create)
   Future<void> addPet(Pet pet) async {
-    await _petsRef.add(pet.toMap());
+    await _petsRef.add({
+      ...pet.toMap(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  // READ — Stream all pets (live updates)
-  Stream<List<Pet>> getPets() {
-    return _petsRef
-        .orderBy('createdAt', descending: false)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-            .toList());
+  // Read all pets (Stream for real-time updates)
+  Stream<QuerySnapshot> getPetsStream() {
+    return _petsRef.orderBy('createdAt', descending: false).snapshots();
   }
 
-  // UPDATE — Edit an existing pet
-  Future<void> updatePet(Pet pet) async {
-    await _petsRef.doc(pet.id).update({
-      'name': pet.name,
-      'type': pet.type,
-      'breed': pet.breed,
-      'birthday': pet.birthday,
-      'weight': pet.weight,
-      'length': pet.length,
-      'height': pet.height,
-      'collarId': pet.collarId,
-      'imageBase64': pet.imageBase64,
+  // Edit an existing pet (Update)
+  Future<void> updatePet(String petId, Map<String, dynamic> data) async {
+    await _petsRef.doc(petId).update({
+      ...data,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
-  // DELETE — Remove a pet
+  // Remove a pet (Delete)
   Future<void> deletePet(String petId) async {
     await _petsRef.doc(petId).delete();
   }

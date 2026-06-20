@@ -71,7 +71,7 @@ class _MapScreenState extends State<MapScreen> {
                       decoration: BoxDecoration(
                         color: hasActiveGeofence ? AppColors.lightTeal : AppColors.cardWhite,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: hasActiveGeofence ? AppColors.primaryTeal.withOpacity(0.3) : AppColors.divider),
+                        border: Border.all(color: hasActiveGeofence ? AppColors.primaryTeal.withValues(alpha: 0.3) : AppColors.divider),
                       ),
                       child: Row(
                         children: [
@@ -114,7 +114,7 @@ class _MapScreenState extends State<MapScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.lightTeal,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.primaryTeal.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.primaryTeal.withValues(alpha: 0.3)),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -122,7 +122,7 @@ class _MapScreenState extends State<MapScreen> {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryTeal.withOpacity(0.15),
+                        color: AppColors.primaryTeal.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.map_rounded, color: AppColors.primaryTeal, size: 54),
@@ -323,7 +323,11 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                   hintText: 'zone_name_hint'.tr(),
                   prefixIcon: const Icon(Icons.location_city_rounded, color: AppColors.textGrey),
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'required'.tr() : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'required'.tr();
+                  if (v.trim().length < 2) return 'Name must be at least 2 characters';
+                  return null;
+                },
               ),
               const SizedBox(height: 14),
 
@@ -335,7 +339,12 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                   hintText: 'latitude_hint'.tr(),
                   prefixIcon: const Icon(Icons.place_rounded, color: AppColors.textGrey),
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'required'.tr() : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'required'.tr();
+                  final lat = double.tryParse(v);
+                  if (lat == null || lat < -90 || lat > 90) return 'Invalid latitude (-90 to 90)';
+                  return null;
+                },
               ),
               const SizedBox(height: 14),
 
@@ -347,7 +356,12 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                   hintText: 'longitude_hint'.tr(),
                   prefixIcon: const Icon(Icons.place_rounded, color: AppColors.textGrey),
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'required'.tr() : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'required'.tr();
+                  final lng = double.tryParse(v);
+                  if (lng == null || lng < -180 || lng > 180) return 'Invalid longitude (-180 to 180)';
+                  return null;
+                },
               ),
               const SizedBox(height: 14),
 
@@ -359,7 +373,12 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                   hintText: 'radius_hint'.tr(),
                   prefixIcon: const Icon(Icons.radio_button_unchecked_rounded, color: AppColors.textGrey),
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'required'.tr() : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'required'.tr();
+                  final radius = double.tryParse(v);
+                  if (radius == null || radius < 10 || radius > 10000) return 'Invalid radius (10-10000 meters)';
+                  return null;
+                },
               ),
               const SizedBox(height: 24),
 

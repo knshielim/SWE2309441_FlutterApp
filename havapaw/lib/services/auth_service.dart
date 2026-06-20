@@ -1,9 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   User? get currentUser => _auth.currentUser;
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -58,5 +60,40 @@ class AuthService {
     if (uid == null) return;
     await _db.collection('users').doc(uid).update({'name': name});
     await _auth.currentUser!.updateDisplayName(name);
+  }
+
+  // Reset password
+  Future<void> resetPassword({required String email}) async {
+    await _auth.sendPasswordResetEmail(email: email);
+  }
+
+  // Sign in with Google
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null;
+      
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      
+      final userCredential = await _auth.signInWithCredential(credential);
+      
+      // Check if user exists in Firestore, if not create a document
+      final userDoc = await _db.collection('users').doc(userCredential.user!.uid).get();
+      if (!userDoc.exists) {
+        await _db.collection('users').doc(userCredential.user!.uid).set({
+          'name': userCredential.user!.displayName ?? '',
+          'email': userCredential.user!.email ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      
+      return userCredential;
+    } catch (e) {
+      throw Exception('Google sign-in failed: $e');
+    }
   }
 }

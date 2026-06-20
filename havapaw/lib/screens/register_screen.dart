@@ -114,7 +114,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   hintText: 'enter_full_name_hint'.tr(),
                   prefixIcon: const Icon(Icons.person_outline, color: AppColors.textGrey),
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'name_required'.tr() : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'name_required'.tr();
+                  if (v.trim().length < 2) return 'Name must be at least 2 characters';
+                  if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v.trim())) return 'Name should only contain letters';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               _buildLabel('email_address'.tr()),
@@ -127,8 +132,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   prefixIcon: const Icon(Icons.email_outlined, color: AppColors.textGrey),
                 ),
                 validator: (v) {
-                  if (v == null || v.isEmpty) return 'email_required'.tr();
-                  if (!v.contains('@')) return 'enter_valid_email'.tr();
+                  if (v == null || v.trim().isEmpty) return 'email_required'.tr();
+                  final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                  if (!emailRegex.hasMatch(v.trim())) return 'enter_valid_email'.tr();
                   return null;
                 },
               ),
@@ -151,7 +157,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'password_required'.tr();
-                  if (v.length < 6) return 'password_min_length'.tr();
+                  if (v.length < 8) return 'Password must be at least 8 characters';
+                  if (!v.contains(RegExp(r'[A-Z]'))) return 'Password must contain at least one uppercase letter';
+                  if (!v.contains(RegExp(r'[a-z]'))) return 'Password must contain at least one lowercase letter';
+                  if (!v.contains(RegExp(r'[0-9]'))) return 'Password must contain at least one number';
                   return null;
                 },
               ),
@@ -183,7 +192,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.alertRed.withOpacity(0.08),
+                    color: AppColors.alertRed.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(

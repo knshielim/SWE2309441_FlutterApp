@@ -42,6 +42,88 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  Future<void> _resetPassword() async {
+    final emailController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('reset_password'.tr()),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: InputDecoration(
+              labelText: 'email'.tr(),
+              hintText: 'enter_email_hint'.tr(),
+              prefixIcon: const Icon(Icons.email_outlined, color: AppColors.textGrey),
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'email_required'.tr();
+              }
+              final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+              if (!emailRegex.hasMatch(value.trim())) {
+                return 'invalid_email'.tr();
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('cancel'.tr()),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                try {
+                  await _authService.resetPassword(email: emailController.text.trim());
+                  if (mounted) {
+                    Navigator.pop(dialogContext);
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      SnackBar(content: Text('password_reset_sent'.tr())),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      SnackBar(content: Text('error: ${e.toString()}')),
+                    );
+                  }
+                }
+              }
+            },
+            child: Text('send'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await _authService.signInWithGoogle();
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      }
+    } on Exception catch (e) {
+      setState(() => _errorMessage = e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
  
   @override
   void dispose() {
@@ -183,6 +265,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         hintText: 'enter_email_hint'.tr(),
                         prefixIcon: const Icon(Icons.email_outlined, color: AppColors.textGrey),
                       ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'email_required'.tr();
+                        final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                        if (!emailRegex.hasMatch(v.trim())) return 'enter_valid_email'.tr();
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 14),
                     TextFormField(
@@ -200,12 +288,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                         ),
                       ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'password_required'.tr();
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 6),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () {},
+                        onPressed: _resetPassword,
                         child: Text(
                           'forgot_password'.tr(),
                           style: const TextStyle(color: AppColors.primaryTeal, fontSize: 13),
@@ -257,34 +349,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Text('G', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.red, fontSize: 18)),
-                            label: Text('google'.tr(), style: const TextStyle(color: AppColors.slateDark)),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              side: const BorderSide(color: AppColors.divider),
-                            ),
-                            onPressed: () {},
-                          ),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Text('G', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.red, fontSize: 18)),
+                        label: Text('google'.tr(), style: const TextStyle(color: AppColors.slateDark)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side: const BorderSide(color: AppColors.divider),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.facebook, color: Color(0xFF1877F2), size: 22),
-                            label: Text('facebook'.tr(), style: const TextStyle(color: AppColors.slateDark)),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              side: const BorderSide(color: AppColors.divider),
-                            ),
-                            onPressed: () {},
-                          ),
-                        ),
-                      ],
+                        onPressed: _isLoading ? null : _signInWithGoogle,
+                      ),
                     ),
                     const SizedBox(height: 20),
                     Row(
