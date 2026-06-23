@@ -116,24 +116,27 @@ class BluetoothService {
   Future<void> syncWatchData(WatchData watchData) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
-    
-    // Store watch data in Firestore
-    await _db.collection('users').doc(uid).collection('watchData').add({
-      ...watchData.toMap(),
-      'syncedAt': FieldValue.serverTimestamp(),
-    });
-    
-    // If data includes pet activity, update pet's health stats
-    if (watchData.petId != null && watchData.steps != null) {
-      await _db
-          .collection('users')
-          .doc(uid)
-          .collection('pets')
-          .doc(watchData.petId)
-          .update({
-        'lastSyncedAt': FieldValue.serverTimestamp(),
-        'steps': watchData.steps,
+
+    try {
+      await _db.collection('users').doc(uid).collection('watchData').add({
+        ...watchData.toMap(),
+        'syncedAt': FieldValue.serverTimestamp(),
       });
+
+      if (watchData.petId != null && watchData.steps != null) {
+        await _db
+            .collection('users')
+            .doc(uid)
+            .collection('pets')
+            .doc(watchData.petId)
+            .update({
+          'lastSyncedAt': FieldValue.serverTimestamp(),
+          'steps': watchData.steps,
+        });
+      }
+      print('Watch data synced');
+    } catch (e) {
+      print('Error syncing watch data: $e');
     }
   }
   

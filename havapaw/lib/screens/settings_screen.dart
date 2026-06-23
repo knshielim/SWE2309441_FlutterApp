@@ -17,7 +17,6 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = AuthService();
     return Scaffold(
       appBar: AppBar(
         title: Text('settings'.tr()),
@@ -33,14 +32,14 @@ class SettingsScreen extends StatelessWidget {
           _SectionHeader('account_settings'.tr()),
           _SettingsTile(
             icon: Icons.person_outline_rounded,
-            label: 'pet_profile'.tr(),
+            label: 'user_profile'.tr(),
             onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const EditAccountProfileScreen()));
             },
           ),
           _SettingsTile(
             icon: Icons.admin_panel_settings_rounded,
-            label: 'account_settings'.tr(),
+            label: 'edit_account_credentials'.tr(),
             onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountSettingsScreen()));
             },
@@ -119,7 +118,7 @@ class SettingsScreen extends StatelessWidget {
                 side: const BorderSide(color: AppColors.alertRed),
               ),
               onPressed: () async {
-                await authService.signOut();
+                await AuthService.signOut();
                 if (context.mounted) {
                   Navigator.pushAndRemoveUntil(
                     context,

@@ -39,7 +39,6 @@ class Pet {
       'collarId': collarId,
       'ownerId': ownerId,
       'imageBase64': imageBase64,
-      'createdAt': FieldValue.serverTimestamp(),
     };
   }
 
@@ -49,7 +48,9 @@ class Pet {
       name: map['name'] ?? '',
       type: map['type'] ?? '',
       breed: map['breed'] ?? '',
-      birthday: map['birthday'] ?? '',
+      birthday: map['birthday'] is String 
+          ? map['birthday'] ?? ''
+          : (map['birthday'] as Timestamp).toDate().toIso8601String(),
       weight: (map['weight'] ?? 0.0).toDouble(),
       length: (map['length'] ?? 0.0).toDouble(),
       height: (map['height'] ?? 0.0).toDouble(),

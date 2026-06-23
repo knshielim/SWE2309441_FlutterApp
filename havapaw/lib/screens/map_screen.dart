@@ -18,9 +18,6 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  final _watchDataService = WatchDataService();
-  final _petService = PetService();
-  final _geofenceService = GeofenceService();
   int _activePetIndex = 0;
 
   void _showGeofenceForm({required String petId}) {
@@ -31,7 +28,7 @@ class _MapScreenState extends State<MapScreen> {
       builder: (_) => _GeofenceFormSheet(
         petId: petId,
         onSave: (geofence) async {
-          await _geofenceService.addGeofence(geofence);
+          await GeofenceService.addGeofence(geofence);
           if (mounted) Navigator.pop(context);
         },
       ),
@@ -52,7 +49,7 @@ class _MapScreenState extends State<MapScreen> {
 
             // Safe zone toggle
             StreamBuilder<QuerySnapshot>(
-              stream: _petService.getPetsStream(),
+              stream: PetService.getPetsStream(),
               builder: (context, petSnapshot) {
                 if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
                   return const SizedBox.shrink();
@@ -64,7 +61,7 @@ class _MapScreenState extends State<MapScreen> {
                 final pet = pets[_activePetIndex];
                 
                 return StreamBuilder<List<Geofence>>(
-                  stream: _geofenceService.getGeofencesForPet(pet.id ?? ''),
+                  stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
                   builder: (context, geofenceSnapshot) {
                     final geofences = geofenceSnapshot.data ?? [];
                     final hasActiveGeofence = geofences.isNotEmpty;
@@ -160,7 +157,7 @@ class _MapScreenState extends State<MapScreen> {
 
             // Location info
             StreamBuilder<WatchData?>(
-              stream: _watchDataService.getLatestWatchData(),
+              stream: WatchDataService.getLatestWatchData(),
               builder: (context, snapshot) {
                 final watchData = snapshot.data;
                 final batteryLevel = watchData?.batteryLevel;

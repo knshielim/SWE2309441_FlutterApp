@@ -17,8 +17,6 @@ class HealthScreen extends StatefulWidget {
 }
 
 class _HealthScreenState extends State<HealthScreen> {
-  final _petService = PetService();
-  final _medicationService = MedicationService();
   int _activePetIndex = 0;
 
   void _showMedicationForm({Medication? medication, required String petId}) {
@@ -37,9 +35,9 @@ class _HealthScreenState extends State<HealthScreen> {
         petId: petId,
         onSave: (newMedication) async {
           if (medication == null) {
-            await _medicationService.addMedication(newMedication);
+            await MedicationService.addMedication(newMedication);
           } else {
-            await _medicationService.updateMedication(medication.id ?? '', newMedication.toMap());
+            await MedicationService.updateMedication(medication.id ?? '', newMedication.toMap());
           }
           if (mounted) Navigator.pop(context);
         },
@@ -61,7 +59,7 @@ class _HealthScreenState extends State<HealthScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await _medicationService.deleteMedication(medicationId);
+              await MedicationService.deleteMedication(medicationId);
               if (mounted) Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
@@ -85,7 +83,7 @@ class _HealthScreenState extends State<HealthScreen> {
           children: [
             // Header with pet name
             StreamBuilder<QuerySnapshot>(
-              stream: _petService.getPetsStream(),
+              stream: PetService.getPetsStream(),
               builder: (context, petSnapshot) {
                 if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
                   return Column(
@@ -119,7 +117,6 @@ class _HealthScreenState extends State<HealthScreen> {
                     _HealthContent(
                       petId: petId,
                       pet: pet,
-                      medicationService: _medicationService,
                       onShowMedicationForm: () => _showMedicationForm(petId: petId),
                       onEditMedication: (medication) => _showMedicationForm(medication: medication, petId: petId),
                       onConfirmDeleteMedication: (medicationId) => _confirmDeleteMedication(medicationId),
@@ -138,7 +135,6 @@ class _HealthScreenState extends State<HealthScreen> {
 class _HealthContent extends StatelessWidget {
   final String petId;
   final Pet pet;
-  final MedicationService medicationService;
   final Function() onShowMedicationForm;
   final Function(Medication) onEditMedication;
   final Function(String) onConfirmDeleteMedication;
@@ -146,7 +142,6 @@ class _HealthContent extends StatelessWidget {
   const _HealthContent({
     required this.petId,
     required this.pet,
-    required this.medicationService,
     required this.onShowMedicationForm,
     required this.onEditMedication,
     required this.onConfirmDeleteMedication,
@@ -154,10 +149,8 @@ class _HealthContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final watchDataService = WatchDataService();
-
     return StreamBuilder<WatchData?>(
-      stream: watchDataService.getLatestWatchData(),
+      stream: WatchDataService.getLatestWatchData(),
       builder: (context, snapshot) {
         final watchData = snapshot.data;
 
@@ -325,9 +318,27 @@ class _HealthContent extends StatelessWidget {
                   ),
                 ),
               )
+            else if (petId.isEmpty)
+              _InfoCard(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, size: 40, color: AppColors.textGrey.withValues(alpha: 0.5)),
+                        const SizedBox(height: 12),
+                        Text(
+                          'pet_id_missing'.tr(),
+                          style: const TextStyle(fontSize: 14, color: AppColors.textGrey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
             else
               StreamBuilder<QuerySnapshot>(
-                stream: medicationService.getMedicationsForPetStream(petId),
+                stream: MedicationService.getMedicationsForPetStream(petId),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
@@ -339,6 +350,7 @@ class _HealthContent extends StatelessWidget {
                   }
                   
                   if (snapshot.hasError) {
+                    print('Error loading medications: ${snapshot.error}');
                     return _InfoCard(
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -350,6 +362,12 @@ class _HealthContent extends StatelessWidget {
                               Text(
                                 'error_loading_medications'.tr(),
                                 style: const TextStyle(fontSize: 14, color: AppColors.textGrey),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${snapshot.error}',
+                                style: const TextStyle(fontSize: 12, color: AppColors.alertRed),
+                                textAlign: TextAlign.center,
                               ),
                             ],
                           ),
@@ -387,7 +405,7 @@ class _HealthContent extends StatelessWidget {
                       medication: med,
                       onEdit: () => onEditMedication(med),
                       onDelete: () => onConfirmDeleteMedication(med.id!),
-                      onToggle: () => medicationService.toggleMedicationStatus(med.id!, !med.isActive),
+                      onToggle: () => MedicationService.toggleMedicationStatus(med.id!, !med.isActive),
                     )).toList(),
                   );
                 },

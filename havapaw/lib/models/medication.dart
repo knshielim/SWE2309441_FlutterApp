@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Medication {
   final String? id;
   final String petId;
@@ -45,9 +47,17 @@ class Medication {
       dosage: map['dosage'] ?? '',
       frequency: map['frequency'] ?? '',
       notes: map['notes'],
-      startDate: DateTime.parse(map['startDate'] ?? DateTime.now().toIso8601String()),
-      endDate: map['endDate'] != null ? DateTime.parse(map['endDate']) : null,
-      reminderTimes: List<int>.from(map['reminderTimes'] ?? []),
+      startDate: map['startDate'] is String 
+          ? DateTime.parse(map['startDate'] ?? DateTime.now().toIso8601String())
+          : (map['startDate'] as Timestamp).toDate(),
+      endDate: map['endDate'] != null 
+          ? (map['endDate'] is String 
+              ? DateTime.parse(map['endDate'])
+              : (map['endDate'] as Timestamp).toDate())
+          : null,
+      reminderTimes: map['reminderTimes'] != null 
+          ? List<int>.from(map['reminderTimes'])
+          : (map['timeOfDay'] != null ? [int.tryParse(map['timeOfDay'].toString()) ?? 0] : []),
       isActive: map['isActive'] ?? true,
     );
   }

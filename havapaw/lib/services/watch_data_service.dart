@@ -3,14 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/watch_data.dart';
 
 class WatchDataService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // Get all watch data for current user
-  Stream<List<WatchData>> getWatchData() {
+  static Stream<List<WatchData>> getWatchData() {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value([]);
-    
+
     return _db
         .collection('users')
         .doc(uid)
@@ -24,10 +24,10 @@ class WatchDataService {
   }
 
   // Get latest watch data
-  Stream<WatchData?> getLatestWatchData() {
+  static Stream<WatchData?> getLatestWatchData() {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value(null);
-    
+
     return _db
         .collection('users')
         .doc(uid)
@@ -42,10 +42,10 @@ class WatchDataService {
   }
 
   // Get watch data for a specific pet
-  Stream<List<WatchData>> getWatchDataForPet(String petId) {
+  static Stream<List<WatchData>> getWatchDataForPet(String petId) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value([]);
-    
+
     return _db
         .collection('users')
         .doc(uid)
@@ -60,10 +60,13 @@ class WatchDataService {
   }
 
   // Get watch data for a time range (for charts)
-  Stream<List<WatchData>> getWatchDataForTimeRange(DateTime start, DateTime end) {
+  static Stream<List<WatchData>> getWatchDataForTimeRange(
+    DateTime start,
+    DateTime end,
+  ) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value([]);
-    
+
     return _db
         .collection('users')
         .doc(uid)

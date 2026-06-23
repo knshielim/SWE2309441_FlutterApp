@@ -15,7 +15,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
@@ -26,7 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
     try {
-      await _authService.login(
+      await AuthService.login(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
@@ -82,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: () async {
               if (formKey.currentState!.validate()) {
                 try {
-                  await _authService.resetPassword(email: emailController.text.trim());
+                  await AuthService.resetPassword(email: emailController.text.trim());
                   if (!mounted) return;
                   Navigator.pop(dialogContext);
                   if (!mounted) return;
@@ -110,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
     try {
-      await _authService.signInWithGoogle();
+      await AuthService.signInWithGoogle();
       if (mounted) {
         Navigator.pushReplacement(
           context,

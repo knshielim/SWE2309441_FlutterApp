@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:convert';
 import '../theme/app_theme.dart';
 import '../services/pet_service.dart';
+import '../services/selected_pet_service.dart';
 import '../models/pet.dart';
 import 'settings_screen.dart';
 import 'about_screen.dart';
@@ -20,8 +21,6 @@ class ProfileScreen extends StatefulWidget {
 }
  
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _petService = PetService();
-  int _activePetIndex = 0;
  
   void _showPetForm({Pet? pet}) {
     showModalBottomSheet(
@@ -32,9 +31,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         existingPet: pet,
         onSave: (newPet) async {
           if (pet == null) {
-            await _petService.addPet(newPet);
+            await PetService.addPet(newPet);
           } else {
-            await _petService.updatePet(pet.id ?? '', newPet.toMap());
+            await PetService.updatePet(pet.id ?? '', newPet.toMap());
           }
           if (mounted) Navigator.pop(context);
         },
@@ -42,7 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
  
-  void _confirmDelete(String petId, String petName) {
+  void _confirmDelete(String petId, String petName, List<String> allPetIds) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -56,11 +55,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await _petService.deletePet(petId);
-              if (mounted) {
-                Navigator.pop(context);
-                setState(() => _activePetIndex = 0);
-              }
+              await PetService.deletePet(petId);
+              final remainingPetIds = allPetIds.where((id) => id != petId).toList();
+              SelectedPetService.handlePetRemoved(petId, remainingPetIds);
+              if (mounted) Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.alertRed,
@@ -95,8 +93,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 20),
  
             // Pet section
-            StreamBuilder<QuerySnapshot>(
-              stream: _petService.getPetsStream(),
+            ValueListenableBuilder<int>(
+              valueListenable: SelectedPetService.notifier,
+              builder: (context, _, child) {
+                return StreamBuilder<QuerySnapshot>(
+              stream: PetService.getPetsStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: AppColors.primaryTeal));
@@ -111,12 +112,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 final pets = snapshot.data!.docs
                     .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
                     .toList();
-
-                if (_activePetIndex >= pets.length && pets.isNotEmpty) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    setState(() => _activePetIndex = pets.length - 1);
-                  });
-                }
+                final petIds = pets.map((pet) => pet.id!).toList();
+                SelectedPetService.ensureValidSelection(petIds);
+                final activePetIndex = SelectedPetService.activeIndex(petIds);
 
                 return Column(
                   children: [
@@ -126,31 +124,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onHorizontalDragEnd: (details) {
                           if (details.primaryVelocity != null) {
                             if (details.primaryVelocity! > 0) {
-                              // Swipe right - go to previous
-                              setState(() => _activePetIndex = ((_activePetIndex - 1 + pets.length) % pets.length).toInt());
+                              SelectedPetService.selectPrevious(petIds);
                             } else {
-                              // Swipe left - go to next
-                              setState(() => _activePetIndex = ((_activePetIndex + 1) % pets.length).toInt());
+                              SelectedPetService.selectNext(petIds);
                             }
                           }
                         },
                         child: _PetProfileCard(
-                          pet: pets[_activePetIndex],
+                          pet: pets[activePetIndex],
                           totalPets: pets.length,
-                          currentIndex: _activePetIndex,
-                          onPrev: () { setState(() => _activePetIndex = ((_activePetIndex - 1 + pets.length) % pets.length).toInt()); },
-                          onNext: () { setState(() => _activePetIndex = ((_activePetIndex + 1) % pets.length).toInt()); },
-                          onEdit: () => _showPetForm(pet: pets[_activePetIndex]),
+                          currentIndex: activePetIndex,
+                          onPrev: () => SelectedPetService.selectPrevious(petIds),
+                          onNext: () => SelectedPetService.selectNext(petIds),
+                          onEdit: () => _showPetForm(pet: pets[activePetIndex]),
                         ),
                       ),
                       const SizedBox(height: 14),
 
                       // Pet details table
-                      _DetailsCard(pet: pets[_activePetIndex]),
+                      _DetailsCard(pet: pets[activePetIndex]),
                       const SizedBox(height: 14),
  
                       // Measurements
-                      _MeasurementsCard(pet: pets[_activePetIndex]),
+                      _MeasurementsCard(pet: pets[activePetIndex]),
                       const SizedBox(height: 14),
  
                       // Pet settings toggles
@@ -168,7 +164,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                             side: const BorderSide(color: AppColors.alertRed),
                           ),
-                          onPressed: () => _confirmDelete(pets[_activePetIndex].id!, pets[_activePetIndex].name),
+                          onPressed: () => _confirmDelete(
+                            pets[activePetIndex].id!,
+                            pets[activePetIndex].name,
+                            petIds,
+                          ),
                         ),
                       ),
                     ] else ...[
@@ -203,6 +203,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ],
                 );
+              },
+            );
               },
             ),
             const SizedBox(height: 16),
@@ -844,56 +846,52 @@ class _PetFormSheetState extends State<_PetFormSheet> {
               ),
               const SizedBox(height: 14),
  
-              // Measurements row
+              // Measurements
               _label('measurements'.tr()),
               const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _weightCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(hintText: 'weight_hint'.tr()),
-                      validator: (v) {
-                        if (v != null && v.isNotEmpty) {
-                          final weight = double.tryParse(v);
-                          if (weight == null || weight <= 0) return 'Invalid weight';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _lengthCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(hintText: 'length_hint'.tr()),
-                      validator: (v) {
-                        if (v != null && v.isNotEmpty) {
-                          final length = double.tryParse(v);
-                          if (length == null || length <= 0) return 'Invalid length';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _heightCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(hintText: 'height_hint'.tr()),
-                      validator: (v) {
-                        if (v != null && v.isNotEmpty) {
-                          final height = double.tryParse(v);
-                          if (height == null || height <= 0) return 'Invalid height';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                ],
+              _label('weight'.tr()),
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: _weightCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(hintText: 'weight_hint'.tr()),
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    final weight = double.tryParse(v);
+                    if (weight == null || weight <= 0) return 'Invalid weight';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              _label('length'.tr()),
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: _lengthCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(hintText: 'length_hint'.tr()),
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    final length = double.tryParse(v);
+                    if (length == null || length <= 0) return 'Invalid length';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              _label('height'.tr()),
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: _heightCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(hintText: 'height_hint'.tr()),
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    final height = double.tryParse(v);
+                    if (height == null || height <= 0) return 'Invalid height';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 24),
 

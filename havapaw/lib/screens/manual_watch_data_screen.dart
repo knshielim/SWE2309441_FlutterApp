@@ -16,7 +16,6 @@ class ManualWatchDataScreen extends StatefulWidget {
 class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
   final _formKey = GlobalKey<FormState>();
   final _bluetoothService = BluetoothService();
-  final _petService = PetService();
   
   final _stepsController = TextEditingController();
   final _heartRateController = TextEditingController();
@@ -45,7 +44,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
   }
 
   Future<void> _loadPets() async {
-    final snapshot = await _petService.getPetsStream().first;
+    final snapshot = await PetService.getPetsStream().first;
     final pets = snapshot.docs
         .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
         .toList();

@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../widgets/bottom_nav.dart';
 import '../theme/app_theme.dart';
 import '../services/pet_service.dart';
+import '../services/selected_pet_service.dart';
 import '../services/watch_data_service.dart';
 import '../models/pet.dart';
 import '../models/watch_data.dart';
@@ -13,6 +14,7 @@ import 'health_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
 import 'account_settings_screen.dart';
+import 'edit_account_profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -55,10 +57,7 @@ class _HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<_HomeTab> {
-  final _petService = PetService();
-  final _watchDataService = WatchDataService();
   final _user = FirebaseAuth.instance.currentUser;
-  int _activePetIndex = 0;
 
   int _calculateHealthScore(WatchData data) {
     int score = 100;
@@ -129,7 +128,7 @@ class _HomeTabState extends State<_HomeTab> {
                 GestureDetector(
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const AccountSettingsScreen()),
+                    MaterialPageRoute(builder: (_) => EditAccountProfileScreen()),
                   ),
                   child: CircleAvatar(
                     backgroundColor: AppColors.lightTeal,
@@ -149,44 +148,48 @@ class _HomeTabState extends State<_HomeTab> {
             const SizedBox(height: 20),
 
             // Pet card
-            StreamBuilder<QuerySnapshot>(
-              stream: _petService.getPetsStream(),
+            ValueListenableBuilder<int>(
+              valueListenable: SelectedPetService.notifier,
+              builder: (context, _, child) {
+                return StreamBuilder<QuerySnapshot>(
+              stream: PetService.getPetsStream(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (snapshot.hasError) {
+                  return const Center(child: Text('Error loading pets'));
+                }
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator(color: AppColors.primaryTeal));
                 }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                if (snapshot.data!.docs.isEmpty) {
                   return _EmptyPetCard();
                 }
                 final pets = snapshot.data!.docs
                     .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
                     .toList();
-                if (_activePetIndex >= pets.length) _activePetIndex = 0;
-                final pet = pets[_activePetIndex];
+                final petIds = pets.map((pet) => pet.id!).toList();
+                SelectedPetService.ensureValidSelection(petIds);
+                final activePetIndex = SelectedPetService.activeIndex(petIds);
+                final pet = pets[activePetIndex];
                 return GestureDetector(
                   onHorizontalDragEnd: (details) {
                     if (details.primaryVelocity != null) {
                       if (details.primaryVelocity! > 0) {
-                        // Swipe right - go to previous
-                        setState(() => _activePetIndex = (_activePetIndex - 1 + pets.length) % pets.length);
+                        SelectedPetService.selectPrevious(petIds);
                       } else {
-                        // Swipe left - go to next
-                        setState(() => _activePetIndex = (_activePetIndex + 1) % pets.length);
+                        SelectedPetService.selectNext(petIds);
                       }
                     }
                   },
                   child: _PetCard(
                     pet: pet,
                     totalPets: pets.length,
-                    currentIndex: _activePetIndex,
-                    onPrev: () {
-                      setState(() => _activePetIndex = (_activePetIndex - 1 + pets.length) % pets.length);
-                    },
-                    onNext: () {
-                      setState(() => _activePetIndex = (_activePetIndex + 1) % pets.length);
-                    },
+                    currentIndex: activePetIndex,
+                    onPrev: () => SelectedPetService.selectPrevious(petIds),
+                    onNext: () => SelectedPetService.selectNext(petIds),
                   ),
                 );
+              },
+            );
               },
             ),
             const SizedBox(height: 16),
@@ -242,7 +245,7 @@ class _HomeTabState extends State<_HomeTab> {
 
             // Health score and stats from smartwatch
             StreamBuilder<WatchData?>(
-              stream: _watchDataService.getLatestWatchData(),
+              stream: WatchDataService.getLatestWatchData(),
               builder: (context, snapshot) {
                 final watchData = snapshot.data;
                 
