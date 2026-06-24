@@ -24,7 +24,7 @@ class PetService {
     }
   }
 
-  // Read all pets (Stream for real-time updates)
+  // Read all pets (Retrieve)
   static Stream<QuerySnapshot> getPetsStream() {
     return _petsRef.orderBy('createdAt', descending: false).snapshots();
   }
