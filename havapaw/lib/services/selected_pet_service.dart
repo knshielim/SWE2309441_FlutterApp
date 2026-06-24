@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+// synchronize the pet card in home page and profile page
 class SelectedPetService {
   static String? selectedPetId;
   static final ValueNotifier<int> notifier = ValueNotifier(0);

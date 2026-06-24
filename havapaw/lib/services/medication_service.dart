@@ -24,12 +24,12 @@ class MedicationService {
     }
   }
 
-  // Read all medications (Stream for real-time updates)
+  // Read all medications (Retrieve)
   static Stream<QuerySnapshot> getMedicationsStream() {
     return _medicationsRef.orderBy('startDate', descending: true).snapshots();
   }
 
-  // Read medications for a specific pet (Stream for real-time updates)
+  // Read medications for a specific pet (Retrieve)
   static Stream<QuerySnapshot> getMedicationsForPetStream(String petId) {
     return _medicationsRef.where('petId', isEqualTo: petId).snapshots();
   }
