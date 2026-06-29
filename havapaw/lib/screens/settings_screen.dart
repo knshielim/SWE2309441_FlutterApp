@@ -1,22 +1,226 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'bluetooth_screen.dart';
 import 'manual_watch_data_screen.dart';
 import 'account_settings_screen.dart';
-import 'edit_account_profile_screen.dart';
 import 'language_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 import 'notification_settings_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
   @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final _auth = FirebaseAuth.instance;
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _dobCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  bool _isLoading = false;
+  
+  Map<String, dynamic>? _userData;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl.text = _auth.currentUser?.displayName ?? '';
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (doc.exists) {
+        setState(() {
+          _userData = doc.data();
+          _phoneCtrl.text = _userData?['phone'] ?? '';
+          _dobCtrl.text = _userData?['dob'] ?? '';
+          _addressCtrl.text = _userData?['address'] ?? '';
+        });
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _dobCtrl.dispose();
+    _addressCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
+      
+      // Update display name in Firebase Auth
+      await user.updateDisplayName(_nameCtrl.text.trim());
+      
+      // Save additional data to Firestore
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'displayName': _nameCtrl.text.trim(),
+        'email': user.email,
+        'phone': _phoneCtrl.text.trim(),
+        'dob': _dobCtrl.text.trim(),
+        'address': _addressCtrl.text.trim(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      }, SetOptions(merge: true));
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully!')),
+        );
+        Navigator.pop(context);
+        _loadUserData(); // Reload data
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _dobCtrl.text.isNotEmpty
+          ? DateTime.tryParse(_dobCtrl.text) ?? DateTime.now()
+          : DateTime.now(),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _dobCtrl.text = picked.toIso8601String().split('T')[0];
+      });
+    }
+  }
+
+  void _showEditProfileModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: EdgeInsets.only(
+          top: 24, left: 24, right: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'edit_profile'.tr(),
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.slateDark),
+              ),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: _nameCtrl,
+                decoration: InputDecoration(
+                  labelText: 'display_name'.tr(),
+                  hintText: 'e.g. John Doe',
+                  prefixIcon: const Icon(Icons.person_rounded, color: AppColors.textGrey),
+                ),
+                validator: (v) => v == null || v.isEmpty ? 'required'.tr() : null,
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _phoneCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: 'phone_number'.tr(),
+                  hintText: 'e.g. +60123456789',
+                  prefixIcon: const Icon(Icons.phone_rounded, color: AppColors.textGrey),
+                ),
+              ),
+              const SizedBox(height: 14),
+              InkWell(
+                onTap: _selectDate,
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'date_of_birth'.tr(),
+                    prefixIcon: const Icon(Icons.cake_rounded, color: AppColors.textGrey),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  ),
+                  child: Text(
+                    _dobCtrl.text.isEmpty ? 'YYYY-MM-DD' : _dobCtrl.text,
+                    style: TextStyle(
+                      color: _dobCtrl.text.isEmpty ? AppColors.textGrey : AppColors.slateDark,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _addressCtrl,
+                decoration: InputDecoration(
+                  labelText: 'address'.tr(),
+                  hintText: 'Your address',
+                  prefixIcon: const Icon(Icons.location_on_rounded, color: AppColors.textGrey),
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _isLoading ? null : _saveProfile,
+                child: _isLoading
+                    ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                    : Text('save_changes'.tr()),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = _auth.currentUser;
+    final fullName = user?.displayName ?? 'User';
+    final firstName = fullName.split(' ')[0];
+    
     return Scaffold(
       appBar: AppBar(
         title: Text('settings'.tr()),
@@ -28,15 +232,69 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          // Account section with user profile inline
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.cardWhite,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: AppColors.lightTeal,
+                      radius: 30,
+                      child: Text(
+                        firstName.isNotEmpty ? firstName[0].toUpperCase() : 'U',
+                        style: const TextStyle(
+                          color: AppColors.primaryTeal,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            fullName,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.slateDark),
+                          ),
+                          Text(
+                            user?.email ?? '',
+                            style: const TextStyle(fontSize: 14, color: AppColors.textGrey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _showEditProfileModal,
+                      icon: const Icon(Icons.edit_rounded, size: 16),
+                      label: const Text('Edit'),
+                      style: TextButton.styleFrom(foregroundColor: AppColors.primaryTeal),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 16),
+                _ProfileRow(Icons.phone_rounded, 'phone_number'.tr(), _userData?['phone'] ?? 'not_set'.tr()),
+                const SizedBox(height: 12),
+                _ProfileRow(Icons.cake_rounded, 'date_of_birth'.tr(), _userData?['dob'] ?? 'not_set'.tr()),
+                const SizedBox(height: 12),
+                _ProfileRow(Icons.location_on_rounded, 'address'.tr(), _userData?['address'] ?? 'not_set'.tr()),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
           // Account section
           _SectionHeader('account_settings'.tr()),
-          _SettingsTile(
-            icon: Icons.person_outline_rounded,
-            label: 'user_profile'.tr(),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const EditAccountProfileScreen()));
-            },
-          ),
           _SettingsTile(
             icon: Icons.admin_panel_settings_rounded,
             label: 'edit_account_credentials'.tr(),
@@ -185,6 +443,36 @@ class _SettingsTile extends StatelessWidget {
         onTap: onTap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
+    );
+  }
+}
+
+class _ProfileRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _ProfileRow(this.icon, this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.textGrey, size: 18),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slateDark),
+            textAlign: TextAlign.right,
+          ),
+        ),
+      ],
     );
   }
 }

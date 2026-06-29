@@ -13,8 +13,7 @@ import '../models/watch_data.dart';
 import 'health_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
-import 'account_settings_screen.dart';
-import 'edit_account_profile_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -128,7 +127,7 @@ class _HomeTabState extends State<_HomeTab> {
                 GestureDetector(
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => EditAccountProfileScreen()),
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
                   ),
                   child: CircleAvatar(
                     backgroundColor: AppColors.lightTeal,
@@ -421,11 +420,21 @@ class _PetCard extends StatelessWidget {
                             width: 70,
                             height: 70,
                             errorBuilder: (context, error, stackTrace) {
-                              return const Icon(Icons.pets, color: Colors.white, size: 38);
+                              return ClipOval(
+                                child: Image.asset(
+                                  'assets/images/logo.png',
+                                  fit: BoxFit.contain,
+                                ),
+                              );
                             },
                           ),
                         )
-                      : const Icon(Icons.pets, color: Colors.white, size: 38),
+                      : ClipOval(
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                 ),
                 const SizedBox(height: 8),
                 Text(pet.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
@@ -475,7 +484,27 @@ class _EmptyPetCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(Icons.pets, color: AppColors.primaryTeal, size: 40),
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.darkTeal.withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/logo.png',
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
           const SizedBox(height: 8),
           Text('no_pets_yet'.tr(), style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.slateDark, fontSize: 16)),
           Text('add_first_pet'.tr(), style: const TextStyle(color: AppColors.textGrey, fontSize: 13)),

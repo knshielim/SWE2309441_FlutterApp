@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
 import '../services/watch_data_service.dart';
 import '../services/pet_service.dart';
@@ -9,6 +10,7 @@ import '../models/watch_data.dart';
 import '../models/pet.dart';
 import '../models/geofence.dart';
 import 'bluetooth_screen.dart';
+import 'settings_screen.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -37,14 +39,47 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final _user = FirebaseAuth.instance.currentUser;
+    final fullName = _user?.displayName ?? 'there';
+    final firstName = fullName.split(' ')[0];
+    
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('live_map'.tr(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.slateDark)),
-            Text('track_pet_location'.tr(), style: const TextStyle(fontSize: 14, color: AppColors.textGrey)),
+            // Header with user profile
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('live_map'.tr(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.slateDark)),
+                    Text('track_pet_location'.tr(), style: const TextStyle(fontSize: 14, color: AppColors.textGrey)),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
+                  child: CircleAvatar(
+                    backgroundColor: AppColors.lightTeal,
+                    radius: 22,
+                    child: Text(
+                      firstName.isNotEmpty ? firstName[0].toUpperCase() : 'U',
+                      style: const TextStyle(
+                        color: AppColors.primaryTeal,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 20),
 
             // Safe zone toggle

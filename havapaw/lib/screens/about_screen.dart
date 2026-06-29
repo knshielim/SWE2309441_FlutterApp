@@ -23,11 +23,23 @@ class AboutScreen extends StatelessWidget {
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    color: AppColors.lightTeal,
+                    color: Colors.white,
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.primaryTeal, width: 3),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.darkTeal.withValues(alpha: 0.2),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.pets, color: AppColors.primaryTeal, size: 50),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),

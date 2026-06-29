@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
 import '../services/watch_data_service.dart';
 import '../services/pet_service.dart';
@@ -8,6 +9,7 @@ import '../services/medication_service.dart';
 import '../models/watch_data.dart';
 import '../models/pet.dart';
 import '../models/medication.dart';
+import 'settings_screen.dart';
 
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key});
@@ -75,12 +77,50 @@ class _HealthScreenState extends State<HealthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final _user = FirebaseAuth.instance.currentUser;
+    final fullName = _user?.displayName ?? 'there';
+    final firstName = fullName.split(' ')[0];
+    
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header with user profile
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'health_monitor'.tr(),
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.slateDark),
+                    ),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
+                  child: CircleAvatar(
+                    backgroundColor: AppColors.lightTeal,
+                    radius: 22,
+                    child: Text(
+                      firstName.isNotEmpty ? firstName[0].toUpperCase() : 'U',
+                      style: const TextStyle(
+                        color: AppColors.primaryTeal,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
             // Header with pet name
             StreamBuilder<QuerySnapshot>(
               stream: PetService.getPetsStream(),
@@ -89,10 +129,6 @@ class _HealthScreenState extends State<HealthScreen> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'health_monitor'.tr(),
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.slateDark),
-                      ),
                       Text('no_pets_added'.tr(), style: const TextStyle(fontSize: 14, color: AppColors.textGrey)),
                       const SizedBox(height: 20),
                       _EmptyStateCard(),
@@ -108,10 +144,6 @@ class _HealthScreenState extends State<HealthScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'health_monitor'.tr(),
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.slateDark),
-                    ),
                     Text('${pet.name} · ${pet.type}', style: const TextStyle(fontSize: 14, color: AppColors.textGrey)),
                     const SizedBox(height: 20),
                     _HealthContent(
