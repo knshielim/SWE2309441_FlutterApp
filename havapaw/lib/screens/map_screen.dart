@@ -342,12 +342,28 @@ class _MapScreenState extends State<MapScreen> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.havapaw.app',
               ),
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '© OpenStreetMap contributors',
+                    style: TextStyle(fontSize: 10, color: Colors.black54),
+                  ),
+                ),
+              ),
               // Geofence circles
               CircleLayer(
                 circles: geofences.map((geofence) {
                   return CircleMarker(
                     point: LatLng(geofence.latitude, geofence.longitude),
                     radius: geofence.radius,
+                    useRadiusInMeter: true,
                     color: AppColors.primaryTeal.withValues(alpha: 0.2),
                     borderColor: AppColors.primaryTeal,
                     borderStrokeWidth: 2,
@@ -695,12 +711,28 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.havapaw.app',
                     ),
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          '© OpenStreetMap contributors',
+                          style: TextStyle(fontSize: 10, color: Colors.black54),
+                        ),
+                      ),
+                    ),
                     if (_selectedLocation != null)
                       CircleLayer(
                         circles: [
                           CircleMarker(
                             point: _selectedLocation!,
                             radius: _radius,
+                            useRadiusInMeter: true,
                             color: AppColors.primaryTeal.withValues(alpha: 0.2),
                             borderColor: AppColors.primaryTeal,
                             borderStrokeWidth: 2,
