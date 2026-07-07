@@ -64,7 +64,6 @@ class _HomeTab extends StatefulWidget {
 class _HomeTabState extends State<_HomeTab> {
   final _user = FirebaseAuth.instance.currentUser;
   Position? _currentPosition;
-  bool _isPetOutsideGeofence = false;
   bool _isOnWalk = false;
 
   @override
