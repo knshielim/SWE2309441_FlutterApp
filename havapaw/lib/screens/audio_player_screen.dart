@@ -18,9 +18,14 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
   String _currentTrack = '';
 
   final List<Map<String, String>> _audioTracks = [
-    {'title': 'calming_music'.tr(), 'path': 'audio/calming_music.mp3'},
-    {'title': 'nature_sounds'.tr(), 'path': 'audio/nature_sounds.mp3'},
-    {'title': 'white_noise'.tr(), 'path': 'audio/white_noise.mp3'},
+    {'title': 'pet_bg_music_1'.tr(), 'path': 'audio/music1.mp3'},
+    {'title': 'pet_bg_music_2'.tr(), 'path': 'audio/music2.mp3'},
+    {'title': 'pet_bg_music_3'.tr(), 'path': 'audio/music3.mp3'},
+    {'title': 'pet_bg_music_4'.tr(), 'path': 'audio/music4.mp3'},
+    {'title': 'pet_bg_music_5'.tr(), 'path': 'audio/music5.mp3'},
+    {'title': 'pet_bg_music_6'.tr(), 'path': 'audio/music6.mp3'},
+    {'title': 'pet_bg_music_7'.tr(), 'path': 'audio/music7.mp3'},
+    {'title': 'pet_bg_music_8'.tr(), 'path': 'audio/music8.mp3'},
   ];
 
   @override
