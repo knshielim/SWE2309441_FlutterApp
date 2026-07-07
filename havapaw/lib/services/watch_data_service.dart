@@ -59,6 +59,25 @@ class WatchDataService {
             .toList());
   }
 
+  // Get latest watch data for a specific pet
+  static Stream<WatchData?> getLatestWatchDataForPet(String petId) {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value(null);
+
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('watchData')
+        .where('petId', isEqualTo: petId)
+        .orderBy('timestamp', descending: true)
+        .limit(1)
+        .snapshots()
+        .map((snapshot) {
+      if (snapshot.docs.isEmpty) return null;
+      return WatchData.fromMap(snapshot.docs.first.data(), snapshot.docs.first.id);
+    });
+  }
+
   // Get watch data for a time range (for charts)
   static Stream<List<WatchData>> getWatchDataForTimeRange(
     DateTime start,

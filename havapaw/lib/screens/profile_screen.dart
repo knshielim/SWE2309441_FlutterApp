@@ -12,6 +12,7 @@ import '../models/pet.dart';
 import 'settings_screen.dart';
 import 'about_screen.dart';
 import 'faq_screen.dart';
+import 'audio_player_screen.dart';
  
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -236,6 +237,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            // Audio player button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AudioPlayerScreen())),
+                icon: const Icon(Icons.music_note_rounded),
+                label: Text('audio_player'.tr()),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryTeal,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ),
             const SizedBox(height: 20),
           ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
@@ -16,6 +17,29 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   bool _medicationReminders = true;
   bool _geofenceAlerts = true;
   bool _lowBatteryAlerts = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _pushNotifications = prefs.getBool('push_notifications') ?? true;
+      _locationAlerts = prefs.getBool('location_alerts') ?? true;
+      _healthAlerts = prefs.getBool('health_alerts') ?? true;
+      _medicationReminders = prefs.getBool('medication_reminders') ?? true;
+      _geofenceAlerts = prefs.getBool('geofence_alerts') ?? true;
+      _lowBatteryAlerts = prefs.getBool('low_battery_alerts') ?? true;
+    });
+  }
+
+  Future<void> _saveSetting(String key, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,42 +70,60 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
             title: 'push_notifications'.tr(),
             subtitle: 'receive_notifications'.tr(),
             value: _pushNotifications,
-            onChanged: (v) => setState(() => _pushNotifications = v),
+            onChanged: (v) {
+              setState(() => _pushNotifications = v);
+              _saveSetting('push_notifications', v);
+            },
           ),
           _NotificationToggle(
             icon: Icons.location_on_rounded,
             title: 'location_alerts'.tr(),
             subtitle: 'alert_leaves_zone'.tr(),
             value: _locationAlerts,
-            onChanged: (v) => setState(() => _locationAlerts = v),
+            onChanged: (v) {
+              setState(() => _locationAlerts = v);
+              _saveSetting('location_alerts', v);
+            },
           ),
           _NotificationToggle(
             icon: Icons.favorite_rounded,
             title: 'health_alerts'.tr(),
             subtitle: 'alerts_health_metrics'.tr(),
             value: _healthAlerts,
-            onChanged: (v) => setState(() => _healthAlerts = v),
+            onChanged: (v) {
+              setState(() => _healthAlerts = v);
+              _saveSetting('health_alerts', v);
+            },
           ),
           _NotificationToggle(
             icon: Icons.medication_rounded,
             title: 'medication_reminders'.tr(),
             subtitle: 'reminders_medications'.tr(),
             value: _medicationReminders,
-            onChanged: (v) => setState(() => _medicationReminders = v),
+            onChanged: (v) {
+              setState(() => _medicationReminders = v);
+              _saveSetting('medication_reminders', v);
+            },
           ),
           _NotificationToggle(
             icon: Icons.shield_rounded,
             title: 'geofence_alerts'.tr(),
             subtitle: 'alerts_enters_exits'.tr(),
             value: _geofenceAlerts,
-            onChanged: (v) => setState(() => _geofenceAlerts = v),
+            onChanged: (v) {
+              setState(() => _geofenceAlerts = v);
+              _saveSetting('geofence_alerts', v);
+            },
           ),
           _NotificationToggle(
             icon: Icons.battery_alert_rounded,
             title: 'low_battery_alerts'.tr(),
             subtitle: 'alert_battery_low'.tr(),
             value: _lowBatteryAlerts,
-            onChanged: (v) => setState(() => _lowBatteryAlerts = v),
+            onChanged: (v) {
+              setState(() => _lowBatteryAlerts = v);
+              _saveSetting('low_battery_alerts', v);
+            },
           ),
           const SizedBox(height: 24),
 

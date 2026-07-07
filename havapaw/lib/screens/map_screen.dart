@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../theme/app_theme.dart';
 import '../services/watch_data_service.dart';
 import '../services/pet_service.dart';
@@ -9,7 +13,6 @@ import '../services/geofence_service.dart';
 import '../models/watch_data.dart';
 import '../models/pet.dart';
 import '../models/geofence.dart';
-import 'bluetooth_screen.dart';
 import 'settings_screen.dart';
 
 class MapScreen extends StatefulWidget {
@@ -21,16 +24,90 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   int _activePetIndex = 0;
+  final MapController _mapController = MapController();
+  Position? _currentPosition;
+  bool _isLoadingLocation = false;
 
-  void _showGeofenceForm({required String petId}) {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _getCurrentLocation();
+    });
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isLoadingLocation = true);
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Location services are disabled'.tr())),
+          );
+        }
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Location permissions are denied'.tr())),
+            );
+          }
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Location permissions are permanently denied'.tr())),
+          );
+        }
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (mounted) {
+        setState(() {
+          _currentPosition = position;
+          _isLoadingLocation = false;
+        });
+        _mapController.move(
+          LatLng(position.latitude, position.longitude),
+          15,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingLocation = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error getting location: $e')),
+        );
+      }
+    }
+  }
+
+  void _showGeofenceForm({required String petId, List<Geofence>? geofences}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _GeofenceFormSheet(
         petId: petId,
+        existingGeofences: geofences,
         onSave: (geofence) async {
-          await GeofenceService.addGeofence(geofence);
+          if (geofence.id != null && geofence.id!.isNotEmpty) {
+            await GeofenceService.updateGeofence(geofence);
+          } else {
+            await GeofenceService.addGeofence(geofence);
+          }
           if (mounted) Navigator.pop(context);
         },
       ),
@@ -39,8 +116,8 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final _user = FirebaseAuth.instance.currentUser;
-    final fullName = _user?.displayName ?? 'there';
+    final user = FirebaseAuth.instance.currentUser;
+    final fullName = user?.displayName ?? 'there';
     final firstName = fullName.split(' ')[0];
     
     return SafeArea(
@@ -128,7 +205,10 @@ class _MapScreenState extends State<MapScreen> {
                             ),
                           ),
                           if (hasActiveGeofence)
-                            const Icon(Icons.check_circle_rounded, color: AppColors.primaryTeal, size: 22)
+                            IconButton(
+                              onPressed: () => _showGeofenceForm(petId: pet.id ?? '', geofences: geofences),
+                              icon: const Icon(Icons.edit_rounded, color: AppColors.primaryTeal, size: 22),
+                            )
                           else
                             IconButton(
                               onPressed: () => _showGeofenceForm(petId: pet.id ?? ''),
@@ -143,49 +223,28 @@ class _MapScreenState extends State<MapScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Map placeholder
+            // Map
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.lightTeal,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.primaryTeal.withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryTeal.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.map_rounded, color: AppColors.primaryTeal, size: 54),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('gps_map'.tr(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.slateDark)),
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: Text(
-                        'connect_collar_gps'.tr(),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const BluetoothScreen()));
-                      },
-                      icon: const Icon(Icons.bluetooth_rounded, size: 18),
-                      label: Text('connect_collar'.tr()),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(180, 46),
-                      ),
-                    ),
-                  ],
-                ),
+              child: StreamBuilder<QuerySnapshot>(
+                stream: PetService.getPetsStream(),
+                builder: (context, petSnapshot) {
+                  if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
+                    return _buildPlaceholderMap();
+                  }
+                  final pets = petSnapshot.data!.docs
+                      .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+                      .toList();
+                  if (_activePetIndex >= pets.length) _activePetIndex = 0;
+                  final pet = pets[_activePetIndex];
+
+                  return StreamBuilder<List<Geofence>>(
+                    stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
+                    builder: (context, geofenceSnapshot) {
+                      final geofences = geofenceSnapshot.data ?? [];
+                      return _buildInteractiveMap(pet, geofences);
+                    },
+                  );
+                },
               ),
             ),
             const SizedBox(height: 16),
@@ -220,6 +279,177 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderMap() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.lightTeal,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.primaryTeal.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.primaryTeal.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.map_rounded, color: AppColors.primaryTeal, size: 54),
+          ),
+          const SizedBox(height: 16),
+          Text('gps_map'.tr(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.slateDark)),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'connect_collar_gps'.tr(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInteractiveMap(Pet pet, List<Geofence> geofences) {
+    final initialCenter = _currentPosition != null
+        ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+        : const LatLng(3.1390, 101.6869); // Default: Kuala Lumpur
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: initialCenter,
+              initialZoom: 15,
+              minZoom: 4,
+              maxZoom: 19,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.doubleTapZoom,
+              ),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.havapaw.app',
+              ),
+              // Geofence circles
+              CircleLayer(
+                circles: geofences.map((geofence) {
+                  return CircleMarker(
+                    point: LatLng(geofence.latitude, geofence.longitude),
+                    radius: geofence.radius,
+                    color: AppColors.primaryTeal.withValues(alpha: 0.2),
+                    borderColor: AppColors.primaryTeal,
+                    borderStrokeWidth: 2,
+                  );
+                }).toList(),
+              ),
+              // Geofence center markers
+              MarkerLayer(
+                markers: geofences.map((geofence) {
+                  return Marker(
+                    point: LatLng(geofence.latitude, geofence.longitude),
+                    width: 40,
+                    height: 40,
+                    child: GestureDetector(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(geofence.name)),
+                        );
+                      },
+                      child: const Icon(
+                        Icons.location_city_rounded,
+                        color: AppColors.primaryTeal,
+                        size: 32,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              // Current location marker
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: _currentPosition != null
+                        ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+                        : initialCenter,
+                    width: 50,
+                    height: 50,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.my_location_rounded,
+                        color: Colors.blue,
+                        size: 30,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              // Pet location marker (placeholder - would come from collar GPS)
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: initialCenter,
+                    width: 50,
+                    height: 50,
+                    child: GestureDetector(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(pet.name)),
+                        );
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryTeal.withValues(alpha: 0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.pets_rounded,
+                          color: AppColors.primaryTeal,
+                          size: 30,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          // Floating action button to recenter
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton(
+              mini: true,
+              backgroundColor: AppColors.primaryTeal,
+              onPressed: _isLoadingLocation ? null : _getCurrentLocation,
+              child: _isLoadingLocation
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.my_location, color: Colors.white),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -260,10 +490,12 @@ class _LocationCard extends StatelessWidget {
 
 class _GeofenceFormSheet extends StatefulWidget {
   final String petId;
+  final List<Geofence>? existingGeofences;
   final Future<void> Function(Geofence) onSave;
 
   const _GeofenceFormSheet({
     required this.petId,
+    this.existingGeofences,
     required this.onSave,
   });
 
@@ -274,158 +506,379 @@ class _GeofenceFormSheet extends StatefulWidget {
 class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl;
-  late TextEditingController _latitudeCtrl;
-  late TextEditingController _longitudeCtrl;
   late TextEditingController _radiusCtrl;
+  final MapController _mapController = MapController();
+  LatLng? _selectedLocation;
+  double _radius = 100.0;
   bool _isLoading = false;
+  Geofence? _editingGeofence;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: 'Home');
-    _latitudeCtrl = TextEditingController(text: '3.1390'); // Default: Kuala Lumpur
-    _longitudeCtrl = TextEditingController(text: '101.6869');
     _radiusCtrl = TextEditingController(text: '100');
+    
+    // Load first existing geofence if available
+    if (widget.existingGeofences != null && widget.existingGeofences!.isNotEmpty) {
+      _editingGeofence = widget.existingGeofences!.first;
+      _nameCtrl.text = _editingGeofence!.name;
+      _selectedLocation = LatLng(_editingGeofence!.latitude, _editingGeofence!.longitude);
+      _radius = _editingGeofence!.radius;
+      _radiusCtrl.text = _radius.round().toString();
+    } else {
+      // Default to current location or KL
+      _selectedLocation = const LatLng(3.1390, 101.6869);
+    }
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _latitudeCtrl.dispose();
-    _longitudeCtrl.dispose();
     _radiusCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate() || _selectedLocation == null) return;
     setState(() => _isLoading = true);
     
     final geofence = Geofence(
+      id: _editingGeofence?.id,
       petId: widget.petId,
       name: _nameCtrl.text.trim(),
-      latitude: double.tryParse(_latitudeCtrl.text) ?? 0.0,
-      longitude: double.tryParse(_longitudeCtrl.text) ?? 0.0,
-      radius: double.tryParse(_radiusCtrl.text) ?? 100.0,
+      latitude: _selectedLocation!.latitude,
+      longitude: _selectedLocation!.longitude,
+      radius: _radius,
       isActive: true,
-      createdAt: DateTime.now(),
+      createdAt: _editingGeofence?.createdAt ?? DateTime.now(),
     );
     
     await widget.onSave(geofence);
     setState(() => _isLoading = false);
   }
 
+  Future<void> _delete() async {
+    if (_editingGeofence?.id == null) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('delete_geofence'.tr()),
+        content: Text('delete_geofence_confirm'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('cancel'.tr()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('delete'.tr(), style: const TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true && mounted) {
+      await GeofenceService.deleteGeofence(_editingGeofence!.id!);
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  Future<void> _searchLocation(String query) async {
+    if (query.trim().isEmpty) return;
+    
+    try {
+      final locations = await locationFromAddress(query);
+      if (locations.isNotEmpty && mounted) {
+        final location = locations.first;
+        setState(() {
+          _selectedLocation = LatLng(location.latitude, location.longitude);
+        });
+        _mapController.move(_selectedLocation!, 15);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Location not found: $query')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.only(
-        top: 24, left: 24, right: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
+      height: MediaQuery.of(context).size.height * 0.85,
+      padding: const EdgeInsets.only(top: 24, left: 24, right: 24),
       decoration: const BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      child: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'configure_safe_zone'.tr(),
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.slateDark),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'safe_zone_desc'.tr(),
-                style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
-              ),
-              const SizedBox(height: 20),
-
-              TextFormField(
-                controller: _nameCtrl,
-                decoration: InputDecoration(
-                  labelText: 'zone_name'.tr(),
-                  hintText: 'zone_name_hint'.tr(),
-                  prefixIcon: const Icon(Icons.location_city_rounded, color: AppColors.textGrey),
-                ),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'required'.tr();
-                  if (v.trim().length < 2) return 'Name must be at least 2 characters';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 14),
-
-              TextFormField(
-                controller: _latitudeCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'latitude'.tr(),
-                  hintText: 'latitude_hint'.tr(),
-                  prefixIcon: const Icon(Icons.place_rounded, color: AppColors.textGrey),
-                ),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'required'.tr();
-                  final lat = double.tryParse(v);
-                  if (lat == null || lat < -90 || lat > 90) return 'Invalid latitude (-90 to 90)';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 14),
-
-              TextFormField(
-                controller: _longitudeCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'longitude'.tr(),
-                  hintText: 'longitude_hint'.tr(),
-                  prefixIcon: const Icon(Icons.place_rounded, color: AppColors.textGrey),
-                ),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'required'.tr();
-                  final lng = double.tryParse(v);
-                  if (lng == null || lng < -180 || lng > 180) return 'Invalid longitude (-180 to 180)';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 14),
-
-              TextFormField(
-                controller: _radiusCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'radius_meters'.tr(),
-                  hintText: 'radius_hint'.tr(),
-                  prefixIcon: const Icon(Icons.radio_button_unchecked_rounded, color: AppColors.textGrey),
-                ),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'required'.tr();
-                  final radius = double.tryParse(v);
-                  if (radius == null || radius < 10 || radius > 10000) return 'Invalid radius (10-10000 meters)';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-
-              ElevatedButton(
-                onPressed: _isLoading ? null : _save,
-                child: _isLoading
-                    ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                    : Text('create_safe_zone'.tr()),
-              ),
-            ],
+      child: Column(
+        children: [
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
+            ),
           ),
-        ),
+          const SizedBox(height: 16),
+          Text(
+            'configure_safe_zone'.tr(),
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.slateDark),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'tap_map_to_set_location'.tr(),
+            style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
+          ),
+          const SizedBox(height: 12),
+          
+          // Location search bar
+          TextField(
+            decoration: InputDecoration(
+              hintText: 'search_location'.tr(),
+              prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textGrey),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.my_location_rounded, color: AppColors.primaryTeal),
+                onPressed: () async {
+                  try {
+                    Position position = await Geolocator.getCurrentPosition(
+                      desiredAccuracy: LocationAccuracy.high,
+                    );
+                    if (mounted) {
+                      setState(() {
+                        _selectedLocation = LatLng(position.latitude, position.longitude);
+                      });
+                      _mapController.move(_selectedLocation!, 15);
+                    }
+                  } catch (e) {
+                    // Silently fail
+                  }
+                },
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.divider),
+              ),
+              filled: true,
+              fillColor: AppColors.cardWhite,
+            ),
+            onSubmitted: _searchLocation,
+          ),
+          const SizedBox(height: 12),
+          
+          // Map for location selection
+          SizedBox(
+            height: 250,
+            child: Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _selectedLocation ?? const LatLng(3.1390, 101.6869),
+                    initialZoom: 15,
+                    minZoom: 4,
+                    maxZoom: 19,
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all & ~InteractiveFlag.doubleTapZoom,
+                    ),
+                    onTap: (tapPosition, point) {
+                      setState(() {
+                        _selectedLocation = point;
+                      });
+                    },
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.havapaw.app',
+                    ),
+                    if (_selectedLocation != null)
+                      CircleLayer(
+                        circles: [
+                          CircleMarker(
+                            point: _selectedLocation!,
+                            radius: _radius,
+                            color: AppColors.primaryTeal.withValues(alpha: 0.2),
+                            borderColor: AppColors.primaryTeal,
+                            borderStrokeWidth: 2,
+                          ),
+                        ],
+                      ),
+                    if (_selectedLocation != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _selectedLocation!,
+                            width: 40,
+                            height: 40,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryTeal,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 3),
+                              ),
+                              child: const Icon(
+                                Icons.location_on_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                // Current location button
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: FloatingActionButton(
+                    mini: true,
+                    backgroundColor: AppColors.primaryTeal,
+                    onPressed: () async {
+                      try {
+                        Position position = await Geolocator.getCurrentPosition(
+                          desiredAccuracy: LocationAccuracy.high,
+                        );
+                        setState(() {
+                          _selectedLocation = LatLng(position.latitude, position.longitude);
+                        });
+                        _mapController.move(_selectedLocation!, 15);
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error getting location: $e')),
+                          );
+                        }
+                      }
+                    },
+                    child: const Icon(Icons.my_location, color: Colors.white, size: 20),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Form fields
+          Expanded(
+            child: SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: _nameCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'zone_name'.tr(),
+                        hintText: 'zone_name_hint'.tr(),
+                        prefixIcon: const Icon(Icons.location_city_rounded, color: AppColors.textGrey),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'required'.tr();
+                        if (v.trim().length < 2) return 'Name must be at least 2 characters';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    Text(
+                      'radius_meters'.tr(),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slateDark),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Slider(
+                            value: _radius,
+                            min: 10,
+                            max: 1000,
+                            divisions: 99,
+                            label: '${_radius.round()}m',
+                            activeColor: AppColors.primaryTeal,
+                            onChanged: (value) {
+                              setState(() {
+                                _radius = value;
+                                _radiusCtrl.text = value.round().toString();
+                              });
+                            },
+                          ),
+                        ),
+                        SizedBox(
+                          width: 60,
+                          child: TextFormField(
+                            controller: _radiusCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              suffixText: 'm',
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            ),
+                            textAlign: TextAlign.center,
+                            onChanged: (value) {
+                              final radius = double.tryParse(value);
+                              if (radius != null && radius >= 10 && radius <= 1000) {
+                                setState(() {
+                                  _radius = radius;
+                                });
+                              }
+                            },
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'required'.tr();
+                              final radius = double.tryParse(v);
+                              if (radius == null || radius < 10 || radius > 1000) return 'Invalid radius (10-10000 meters)';
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    Row(
+                      children: [
+                        if (_editingGeofence != null)
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _isLoading ? null : _delete,
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 50),
+                                side: const BorderSide(color: Colors.red),
+                              ),
+                              child: Text('delete'.tr(), style: const TextStyle(color: Colors.red)),
+                            ),
+                          ),
+                        if (_editingGeofence != null) const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _save,
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 50),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                  )
+                                : Text(_editingGeofence != null ? 'update'.tr() : 'save'.tr()),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

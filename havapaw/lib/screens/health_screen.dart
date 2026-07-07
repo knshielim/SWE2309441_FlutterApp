@@ -253,71 +253,6 @@ class _HealthContent extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Heart rate graph - only show if we have data
-            if (watchData != null) ...[
-              _InfoCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('latest_reading'.tr(), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.alertRed.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _formatDate(watchData.timestamp),
-                            style: const TextStyle(color: AppColors.alertRed, fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    if (watchData.heartRate != null)
-                      Text(
-                        '${'heart_rate'.tr()}: ${watchData.heartRate} ${'bpm'.tr()}',
-                        style: const TextStyle(fontSize: 14, color: AppColors.slateDark),
-                      ),
-                    if (watchData.temperature != null)
-                      Text(
-                        '${'temperature'.tr()}: ${watchData.temperature!.toStringAsFixed(1)}°C',
-                        style: const TextStyle(fontSize: 14, color: AppColors.slateDark),
-                      ),
-                    if (watchData.steps != null)
-                      Text(
-                        '${'steps'.tr()}: ${watchData.steps}',
-                        style: const TextStyle(fontSize: 14, color: AppColors.slateDark),
-                      ),
-                    if (watchData.calories != null)
-                      Text(
-                        '${'calories'.tr()}: ${watchData.calories}',
-                        style: const TextStyle(fontSize: 14, color: AppColors.slateDark),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ] else ...[
-              _InfoCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('no_watch_data'.tr(), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark)),
-                    const SizedBox(height: 8),
-                    Text(
-                      'connect_smartwatch_desc'.tr(),
-                      style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-
             // Medications section
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -928,5 +863,82 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     if (picked != null && mounted) {
       setState(() => _endDate = picked);
     }
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String unit;
+  final Color color;
+
+  const _MetricCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.unit,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(fontSize: 11, color: AppColors.textGrey),
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.slateDark,
+                    ),
+                  ),
+                  if (unit.isNotEmpty) ...[
+                    const SizedBox(width: 2),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        unit,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textGrey,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

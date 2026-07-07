@@ -2,14 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import 'dart:math';
 import 'dart:convert';
 import '../widgets/bottom_nav.dart';
 import '../theme/app_theme.dart';
 import '../services/pet_service.dart';
 import '../services/selected_pet_service.dart';
 import '../services/watch_data_service.dart';
+import '../services/geofence_service.dart';
 import '../models/pet.dart';
 import '../models/watch_data.dart';
+import '../models/geofence.dart';
 import 'health_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
@@ -57,6 +63,94 @@ class _HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<_HomeTab> {
   final _user = FirebaseAuth.instance.currentUser;
+  Position? _currentPosition;
+  bool _isPetOutsideGeofence = false;
+  bool _isOnWalk = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+  }
+
+  // Calculate distance between two points in meters using Haversine formula
+  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    const double earthRadius = 6371000; // Earth's radius in meters
+    final double dLat = (lat2 - lat1) * pi / 180;
+    final double dLon = (lon2 - lon1) * pi / 180;
+    final double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) *
+        sin(dLon / 2) * sin(dLon / 2);
+    final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return earthRadius * c;
+  }
+
+  // Check if pet is within geofence radius
+  bool _isPetWithinGeofence(LatLng petLocation, Geofence geofence) {
+    final distance = _calculateDistance(
+      petLocation.latitude,
+      petLocation.longitude,
+      geofence.latitude,
+      geofence.longitude,
+    );
+    return distance <= geofence.radius;
+  }
+
+  // Show alert dialog when pet is outside geofence
+  void _showGeofenceAlertDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_rounded, color: AppColors.alertRed),
+            const SizedBox(width: 8),
+            Text('pet_outside_zone_alert'.tr()),
+          ],
+        ),
+        content: Text('pet_outside_zone_desc'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() => _isOnWalk = true);
+            },
+            child: Text('on_walk'.tr()),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: Text('dismiss'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
+      }
+
+      if (permission == LocationPermission.deniedForever) return;
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (mounted) {
+        setState(() => _currentPosition = position);
+      }
+    } catch (e) {
+      // Silently fail for preview
+    }
+  }
 
   int _calculateHealthScore(WatchData data) {
     int score = 100;
@@ -169,76 +263,218 @@ class _HomeTabState extends State<_HomeTab> {
                 SelectedPetService.ensureValidSelection(petIds);
                 final activePetIndex = SelectedPetService.activeIndex(petIds);
                 final pet = pets[activePetIndex];
-                return GestureDetector(
-                  onHorizontalDragEnd: (details) {
-                    if (details.primaryVelocity != null) {
-                      if (details.primaryVelocity! > 0) {
-                        SelectedPetService.selectPrevious(petIds);
-                      } else {
-                        SelectedPetService.selectNext(petIds);
-                      }
-                    }
-                  },
-                  child: _PetCard(
-                    pet: pet,
-                    totalPets: pets.length,
-                    currentIndex: activePetIndex,
-                    onPrev: () => SelectedPetService.selectPrevious(petIds),
-                    onNext: () => SelectedPetService.selectNext(petIds),
-                  ),
+                return Column(
+                  children: [
+                    GestureDetector(
+                      onHorizontalDragEnd: (details) {
+                        if (details.primaryVelocity != null) {
+                          if (details.primaryVelocity! > 0) {
+                            SelectedPetService.selectPrevious(petIds);
+                          } else {
+                            SelectedPetService.selectNext(petIds);
+                          }
+                        }
+                      },
+                      child: _PetCard(
+                        pet: pet,
+                        totalPets: pets.length,
+                        currentIndex: activePetIndex,
+                        onPrev: () => SelectedPetService.selectPrevious(petIds),
+                        onNext: () => SelectedPetService.selectNext(petIds),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Map preview
+                    _SectionCard(
+                      child: StreamBuilder<List<Geofence>>(
+                        stream: pet.id != null ? GeofenceService.getGeofencesForPet(pet.id!) : Stream.value([]),
+                        builder: (context, geofenceSnapshot) {
+                          final geofences = geofenceSnapshot.data ?? [];
+                          
+                          // Get pet's actual location from watch data
+                          return StreamBuilder<WatchData?>(
+                            stream: pet.id != null ? WatchDataService.getLatestWatchDataForPet(pet.id!) : Stream.value(null),
+                            builder: (context, watchDataSnapshot) {
+                              final watchData = watchDataSnapshot.data;
+                              
+                              // Determine pet location (from watch data or geofence center)
+                              final petLocation = (watchData?.latitude != null && watchData?.longitude != null)
+                                  ? LatLng(watchData!.latitude!, watchData.longitude!)
+                                  : (geofences.isNotEmpty
+                                      ? LatLng(geofences.first.latitude, geofences.first.longitude)
+                                      : const LatLng(3.1390, 101.6869));
+                              
+                              // Check if pet is outside geofence
+                              bool isOutside = false;
+                              if (geofences.isNotEmpty && watchData?.latitude != null && watchData?.longitude != null) {
+                                isOutside = !_isPetWithinGeofence(petLocation, geofences.first);
+                              }
+                              
+                              final userLocation = _currentPosition != null
+                                  ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+                                  : petLocation;
+                              final mapCenter = _currentPosition != null
+                                  ? userLocation
+                                  : petLocation;
+                              
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(Icons.location_on_rounded, color: (isOutside && !_isOnWalk) ? AppColors.alertRed : AppColors.primaryTeal, size: 18),
+                                          const SizedBox(width: 6),
+                                          Text('current_location'.tr(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.slateDark)),
+                                        ],
+                                      ),
+                                      if (geofences.isEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.lightTeal,
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: Text('no_safe_zone'.tr(), style: const TextStyle(color: AppColors.primaryTeal, fontSize: 11, fontWeight: FontWeight.w600)),
+                                        )
+                                      else if (isOutside && !_isOnWalk)
+                                        GestureDetector(
+                                          onTap: () => _showGeofenceAlertDialog(),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.alertRed.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(20),
+                                              border: Border.all(color: AppColors.alertRed),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.warning_rounded, color: AppColors.alertRed, size: 12),
+                                                const SizedBox(width: 4),
+                                                Text('pet_outside_zone'.tr(), style: const TextStyle(color: AppColors.alertRed, fontSize: 11, fontWeight: FontWeight.w600)),
+                                              ],
+                                            ),
+                                          ),
+                                        )
+                                      else if (_isOnWalk)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(color: Colors.amber),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.directions_walk_rounded, color: Colors.amber, size: 12),
+                                              const SizedBox(width: 4),
+                                              Text('on_walk'.tr(), style: const TextStyle(color: Colors.amber, fontSize: 11, fontWeight: FontWeight.w600)),
+                                            ],
+                                          ),
+                                        )
+                                      else
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.lightTeal,
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: Text('safe_zone'.tr(), style: const TextStyle(color: AppColors.primaryTeal, fontSize: 11, fontWeight: FontWeight.w600)),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    height: 150,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: FlutterMap(
+                                        options: MapOptions(
+                                          initialCenter: mapCenter,
+                                          initialZoom: 14,
+                                          minZoom: 4,
+                                          maxZoom: 18,
+                                          interactionOptions: const InteractionOptions(
+                                            flags: InteractiveFlag.none,
+                                          ),
+                                        ),
+                                        children: [
+                                          TileLayer(
+                                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                            userAgentPackageName: 'com.havapaw.app',
+                                          ),
+                                          // Geofence circles
+                                          if (geofences.isNotEmpty)
+                                            CircleLayer(
+                                              circles: geofences.map((g) => CircleMarker(
+                                                point: LatLng(g.latitude, g.longitude),
+                                                radius: g.radius,
+                                                color: isOutside && !_isOnWalk ? AppColors.alertRed.withValues(alpha: 0.2) : AppColors.primaryTeal.withValues(alpha: 0.2),
+                                                borderColor: isOutside && !_isOnWalk ? AppColors.alertRed : AppColors.primaryTeal,
+                                                borderStrokeWidth: 2,
+                                              )).toList(),
+                                            ),
+                                          // User location marker
+                                          MarkerLayer(
+                                            markers: [
+                                              Marker(
+                                                point: userLocation,
+                                                width: 30,
+                                                height: 30,
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.blue.withValues(alpha: 0.3),
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.my_location_rounded,
+                                                    color: Colors.blue,
+                                                    size: 16,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          // Pet location marker
+                                          MarkerLayer(
+                                            markers: [
+                                              Marker(
+                                                point: petLocation,
+                                                width: 30,
+                                                height: 30,
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: isOutside && !_isOnWalk ? AppColors.alertRed.withValues(alpha: 0.3) : AppColors.primaryTeal.withValues(alpha: 0.3),
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.pets_rounded,
+                                                    color: isOutside && !_isOnWalk ? AppColors.alertRed : AppColors.primaryTeal,
+                                                    size: 16,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 );
               },
             );
               },
-            ),
-            const SizedBox(height: 16),
-
-            // Map preview
-            _SectionCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on_rounded, color: AppColors.primaryTeal, size: 18),
-                          const SizedBox(width: 6),
-                          Text('current_location'.tr(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.slateDark)),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.lightTeal,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text('safe_zone'.tr(), style: const TextStyle(color: AppColors.primaryTeal, fontSize: 11, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: AppColors.lightTeal,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.map_rounded, color: AppColors.primaryTeal, size: 36),
-                          const SizedBox(height: 6),
-                          Text('map_preview'.tr(), style: const TextStyle(color: AppColors.primaryTeal, fontWeight: FontWeight.w600)),
-                          Text('connect_gps_collar'.tr(), style: const TextStyle(color: AppColors.textGrey, fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
             const SizedBox(height: 16),
 

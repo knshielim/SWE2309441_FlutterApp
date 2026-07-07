@@ -10,6 +10,8 @@ class WatchData {
   final int? batteryLevel; // 0-100
   final DateTime timestamp;
   final String? petId; // Optional: associate with specific pet
+  final double? latitude; // Pet's GPS latitude
+  final double? longitude; // Pet's GPS longitude
 
   WatchData({
     this.id,
@@ -23,6 +25,8 @@ class WatchData {
     this.batteryLevel,
     required this.timestamp,
     this.petId,
+    this.latitude,
+    this.longitude,
   });
 
   Map<String, dynamic> toMap() {
@@ -37,6 +41,8 @@ class WatchData {
       'batteryLevel': batteryLevel,
       'timestamp': timestamp.toIso8601String(),
       'petId': petId,
+      'latitude': latitude,
+      'longitude': longitude,
     };
   }
 
@@ -53,6 +59,8 @@ class WatchData {
       batteryLevel: map['batteryLevel'],
       timestamp: DateTime.parse(map['timestamp'] ?? DateTime.now().toIso8601String()),
       petId: map['petId'],
+      latitude: map['latitude']?.toDouble(),
+      longitude: map['longitude']?.toDouble(),
     );
   }
 

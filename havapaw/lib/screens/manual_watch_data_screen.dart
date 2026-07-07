@@ -20,7 +20,6 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
   final _stepsController = TextEditingController();
   final _heartRateController = TextEditingController();
   final _distanceController = TextEditingController();
-  final _caloriesController = TextEditingController();
   final _temperatureController = TextEditingController();
   
   String? _selectedPetId;
@@ -38,7 +37,6 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
     _stepsController.dispose();
     _heartRateController.dispose();
     _distanceController.dispose();
-    _caloriesController.dispose();
     _temperatureController.dispose();
     super.dispose();
   }
@@ -73,7 +71,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
         steps: int.tryParse(_stepsController.text),
         heartRate: int.tryParse(_heartRateController.text),
         distance: double.tryParse(_distanceController.text),
-        calories: int.tryParse(_caloriesController.text),
+        calories: null, // Calculated automatically from steps/distance
         temperature: double.tryParse(_temperatureController.text),
         timestamp: DateTime.now(),
         petId: _selectedPetId,
@@ -142,7 +140,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Enter your watch data from the Laxasfit app manually. This data will be synced to Firebase.',
+                        'Enter your pet\'s collar data manually. This data will be synced to Firebase.',
                         style: TextStyle(fontSize: 13, color: AppColors.textGrey),
                       ),
                     ],
@@ -233,26 +231,6 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                     if (v != null && v.isNotEmpty) {
                       final distance = double.tryParse(v);
                       if (distance == null || distance < 0) return 'Invalid distance value';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Calories
-                _label('Calories (kcal)'),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _caloriesController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. 350',
-                    prefixIcon: Icon(Icons.local_fire_department_rounded, color: AppColors.textGrey),
-                  ),
-                  validator: (v) {
-                    if (v != null && v.isNotEmpty) {
-                      final calories = int.tryParse(v);
-                      if (calories == null || calories < 0) return 'Invalid calories value';
                     }
                     return null;
                   },
