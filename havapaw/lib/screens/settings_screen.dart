@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
+import '../services/sound_service.dart';
 import 'login_screen.dart';
 import 'bluetooth_screen.dart';
 import 'manual_watch_data_screen.dart';
@@ -12,6 +13,7 @@ import 'language_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 import 'notification_settings_screen.dart';
+import 'music_selection_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -28,6 +30,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _dobCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   bool _isLoading = false;
+  bool _isMusicEnabled = true;
+  bool _isSfxEnabled = true;
   
   Map<String, dynamic>? _userData;
 
@@ -36,6 +40,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _nameCtrl.text = _auth.currentUser?.displayName ?? '';
     _loadUserData();
+    _loadSoundSettings();
+  }
+
+  Future<void> _loadSoundSettings() async {
+    setState(() {
+      _isMusicEnabled = SoundService.isMusicEnabled;
+      _isSfxEnabled = SoundService.isSfxEnabled;
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -304,6 +316,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 20),
 
+          // Sound section
+          _SectionHeader('sound_settings'.tr()),
+          _SoundToggleTile(
+            icon: Icons.music_note_rounded,
+            label: 'background_music'.tr(),
+            subtitle: 'play_music_in_background'.tr(),
+            value: _isMusicEnabled,
+            onChanged: (value) async {
+              setState(() => _isMusicEnabled = value);
+              await SoundService.setMusicEnabled(value);
+            },
+          ),
+          _SettingsTile(
+            icon: Icons.playlist_play_rounded,
+            label: 'select_background_music'.tr(),
+            trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textGrey, size: 20),
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const MusicSelectionScreen()));
+            },
+          ),
+          _SoundToggleTile(
+            icon: Icons.volume_up_rounded,
+            label: 'sound_effects'.tr(),
+            subtitle: 'play_click_sounds'.tr(),
+            value: _isSfxEnabled,
+            onChanged: (value) async {
+              setState(() => _isSfxEnabled = value);
+              await SoundService.setSfxEnabled(value);
+            },
+          ),
+          const SizedBox(height: 20),
+
           // Preferences
           _SectionHeader('preferences'.tr()),
           _SettingsTile(
@@ -473,6 +517,62 @@ class _ProfileRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SoundToggleTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SoundToggleTile({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.slateDark, size: 22),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slateDark),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.primaryTeal,
+          ),
+        ],
+      ),
     );
   }
 }

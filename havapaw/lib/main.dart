@@ -10,6 +10,7 @@ import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/notification_service.dart';
 import 'services/selected_pet_service.dart';
+import 'services/sound_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +20,7 @@ void main() async {
 
   await NotificationService.initialize();
   await SelectedPetService.loadSelectedPetId();
+  await SoundService.init();
   
   final prefs = await SharedPreferences.getInstance();
   final savedLangCode = prefs.getString('language_code') ?? 'en';
