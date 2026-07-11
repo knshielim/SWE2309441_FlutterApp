@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:latlong2/latlong.dart';
+import 'dart:math';
 import '../models/geofence.dart';
 
 class GeofenceService {
@@ -109,5 +111,28 @@ class GeofenceService {
     } catch (e) {
       print('Error updating geofence status: $e');
     }
+  }
+
+  // Calculate distance between two points in meters using Haversine formula
+  static double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    const double earthRadius = 6371000; // Earth's radius in meters
+    final double dLat = (lat2 - lat1) * pi / 180;
+    final double dLon = (lon2 - lon1) * pi / 180;
+    final double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) *
+        sin(dLon / 2) * sin(dLon / 2);
+    final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return earthRadius * c;
+  }
+
+  // Check if pet is within geofence radius
+  static bool isPetWithinGeofence(LatLng petLocation, Geofence geofence) {
+    final distance = calculateDistance(
+      petLocation.latitude,
+      petLocation.longitude,
+      geofence.latitude,
+      geofence.longitude,
+    );
+    return distance <= geofence.radius;
   }
 }

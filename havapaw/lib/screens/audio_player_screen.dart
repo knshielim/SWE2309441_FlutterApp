@@ -138,9 +138,11 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
                     // Progress bar
                     Slider(
                       value: _position.inSeconds.toDouble(),
-                      max: _duration.inSeconds.toDouble(),
+                      max: _duration.inSeconds.toDouble() > 0 ? _duration.inSeconds.toDouble() : 1.0,
                       onChanged: (value) async {
-                        await _audioPlayer.seek(Duration(seconds: value.toInt()));
+                        if (value.isFinite && value >= 0) {
+                          await _audioPlayer.seek(Duration(seconds: value.toInt()));
+                        }
                       },
                       activeColor: AppColors.primaryTeal,
                     ),

@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../services/watch_data_service.dart';
 import '../services/pet_service.dart';
 import '../services/geofence_service.dart';
+import '../services/pet_location_service.dart';
 import '../models/watch_data.dart';
 import '../models/pet.dart';
 import '../models/geofence.dart';
@@ -27,6 +28,13 @@ class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   Position? _currentPosition;
   bool _isLoadingLocation = false;
+
+  // Clamp coordinates to valid world ranges
+  LatLng _clampCoordinates(double lat, double lng) {
+    final clampedLat = lat.clamp(-85.0, 85.0);
+    final clampedLng = lng.clamp(-180.0, 180.0);
+    return LatLng(clampedLat, clampedLng);
+  }
 
   @override
   void initState() {
@@ -75,14 +83,23 @@ class _MapScreenState extends State<MapScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
       if (mounted) {
-        setState(() {
-          _currentPosition = position;
-          _isLoadingLocation = false;
-        });
-        _mapController.move(
-          LatLng(position.latitude, position.longitude),
-          15,
-        );
+        final lat = position.latitude;
+        final lng = position.longitude;
+        if (lat.isFinite && lng.isFinite) {
+          setState(() {
+            _currentPosition = position;
+            _isLoadingLocation = false;
+          });
+          _mapController.move(
+            _clampCoordinates(lat, lng),
+            15,
+          );
+        } else {
+          setState(() => _isLoadingLocation = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Invalid location coordinates'.tr())),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -237,45 +254,41 @@ class _MapScreenState extends State<MapScreen> {
                   if (_activePetIndex >= pets.length) _activePetIndex = 0;
                   final pet = pets[_activePetIndex];
 
-                  return StreamBuilder<List<Geofence>>(
-                    stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
-                    builder: (context, geofenceSnapshot) {
-                      final geofences = geofenceSnapshot.data ?? [];
-                      return _buildInteractiveMap(pet, geofences);
-                    },
+                  return Column(
+                    children: [
+                      StreamBuilder<List<Geofence>>(
+                        stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
+                        builder: (context, geofenceSnapshot) {
+                          final geofences = geofenceSnapshot.data ?? [];
+                          return _buildInteractiveMap(pet, geofences);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      // Location info
+                      StreamBuilder<LatLng?>(
+                        stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
+                        builder: (context, snapshot) {
+                          final petLocation = snapshot.data;
+                          
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: _LocationCard(
+                                  icon: Icons.location_history_rounded,
+                                  label: 'last_known'.tr(),
+                                  value: petLocation != null && petLocation.latitude.isFinite && petLocation.longitude.isFinite
+                                      ? '${petLocation.latitude.toStringAsFixed(4)}, ${petLocation.longitude.toStringAsFixed(4)}'
+                                      : 'not_set'.tr(),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
                   );
                 },
               ),
-            ),
-            const SizedBox(height: 16),
-
-            // Location info
-            StreamBuilder<WatchData?>(
-              stream: WatchDataService.getLatestWatchData(),
-              builder: (context, snapshot) {
-                final watchData = snapshot.data;
-                final batteryLevel = watchData?.batteryLevel;
-                
-                return Row(
-                  children: [
-                    Expanded(
-                      child: _LocationCard(
-                        icon: Icons.location_history_rounded,
-                        label: 'last_known'.tr(),
-                        value: 'home'.tr(),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _LocationCard(
-                        icon: Icons.battery_charging_full_rounded,
-                        label: 'collar_battery'.tr(),
-                        value: batteryLevel != null ? '$batteryLevel%' : '--',
-                      ),
-                    ),
-                  ],
-                );
-              },
             ),
           ],
         ),
@@ -318,9 +331,18 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _buildInteractiveMap(Pet pet, List<Geofence> geofences) {
-    final initialCenter = _currentPosition != null
-        ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
-        : const LatLng(3.1390, 101.6869); // Default: Kuala Lumpur
+    LatLng initialCenter;
+    if (_currentPosition != null) {
+      final lat = _currentPosition!.latitude;
+      final lng = _currentPosition!.longitude;
+      if (lat.isFinite && lng.isFinite) {
+        initialCenter = _clampCoordinates(lat, lng);
+      } else {
+        initialCenter = const LatLng(3.1390, 101.6869); // Default: Kuala Lumpur
+      }
+    } else {
+      initialCenter = const LatLng(3.1390, 101.6869); // Default: Kuala Lumpur
+    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -360,21 +382,27 @@ class _MapScreenState extends State<MapScreen> {
               // Geofence circles
               CircleLayer(
                 circles: geofences.map((geofence) {
+                  final lat = geofence.latitude;
+                  final lng = geofence.longitude;
+                  if (!lat.isFinite || !lng.isFinite) return null;
                   return CircleMarker(
-                    point: LatLng(geofence.latitude, geofence.longitude),
+                    point: _clampCoordinates(lat, lng),
                     radius: geofence.radius,
                     useRadiusInMeter: true,
                     color: AppColors.primaryTeal.withValues(alpha: 0.2),
                     borderColor: AppColors.primaryTeal,
                     borderStrokeWidth: 2,
                   );
-                }).toList(),
+                }).whereType<CircleMarker>().toList(),
               ),
               // Geofence center markers
               MarkerLayer(
                 markers: geofences.map((geofence) {
+                  final lat = geofence.latitude;
+                  final lng = geofence.longitude;
+                  if (!lat.isFinite || !lng.isFinite) return null;
                   return Marker(
-                    point: LatLng(geofence.latitude, geofence.longitude),
+                    point: _clampCoordinates(lat, lng),
                     width: 40,
                     height: 40,
                     child: GestureDetector(
@@ -390,32 +418,55 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ),
                   );
-                }).toList(),
+                }).whereType<Marker>().toList(),
               ),
               // Current location marker
               MarkerLayer(
                 markers: [
-                  Marker(
-                    point: _currentPosition != null
-                        ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
-                        : initialCenter,
-                    width: 50,
-                    height: 50,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.3),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.my_location_rounded,
-                        color: Colors.blue,
-                        size: 30,
+                  if (_currentPosition != null)
+                    Marker(
+                      point: _currentPosition!.latitude.isFinite && _currentPosition!.longitude.isFinite
+                          ? _clampCoordinates(_currentPosition!.latitude, _currentPosition!.longitude)
+                          : initialCenter,
+                      width: 50,
+                      height: 50,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.my_location_rounded,
+                          color: Colors.blue,
+                          size: 30,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
-              // Pet location marker (placeholder - would come from collar GPS)
+              // Owner location marker
+              MarkerLayer(
+                markers: [
+                  if (_currentPosition != null && _currentPosition!.latitude.isFinite && _currentPosition!.longitude.isFinite)
+                    Marker(
+                      point: _clampCoordinates(_currentPosition!.latitude, _currentPosition!.longitude),
+                      width: 50,
+                      height: 50,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.person_rounded,
+                          color: Colors.blue,
+                          size: 30,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              // Pet location marker
               MarkerLayer(
                 markers: [
                   Marker(
@@ -608,10 +659,14 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
       final locations = await locationFromAddress(query);
       if (locations.isNotEmpty && mounted) {
         final location = locations.first;
-        setState(() {
-          _selectedLocation = LatLng(location.latitude, location.longitude);
-        });
-        _mapController.move(_selectedLocation!, 15);
+        final lat = location.latitude;
+        final lng = location.longitude;
+        if (lat.isFinite && lng.isFinite) {
+          setState(() {
+            _selectedLocation = _clampCoordinates(lat, lng);
+          });
+          _mapController.move(_selectedLocation!, 15);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -775,10 +830,14 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                         Position position = await Geolocator.getCurrentPosition(
                           desiredAccuracy: LocationAccuracy.high,
                         );
-                        setState(() {
-                          _selectedLocation = LatLng(position.latitude, position.longitude);
-                        });
-                        _mapController.move(_selectedLocation!, 15);
+                        final lat = position.latitude;
+                        final lng = position.longitude;
+                        if (lat.isFinite && lng.isFinite) {
+                          setState(() {
+                            _selectedLocation = _clampCoordinates(lat, lng);
+                          });
+                          _mapController.move(_selectedLocation!, 15);
+                        }
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(

@@ -27,6 +27,14 @@ class _SoundSettingsScreenState extends State<SoundSettingsScreen> {
       _isMusicEnabled = SoundService.isMusicEnabled;
       _isSfxEnabled = SoundService.isSfxEnabled;
       _musicVolume = SoundService.volume;
+      // Ensure volume is a valid number between 0 and 1
+      if (_musicVolume.isNaN || !_musicVolume.isFinite) {
+        _musicVolume = 0.5;
+      } else if (_musicVolume < 0) {
+        _musicVolume = 0.0;
+      } else if (_musicVolume > 1) {
+        _musicVolume = 1.0;
+      }
     });
   }
 

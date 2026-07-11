@@ -13,6 +13,7 @@ import '../services/pet_service.dart';
 import '../services/selected_pet_service.dart';
 import '../services/watch_data_service.dart';
 import '../services/geofence_service.dart';
+import '../services/pet_location_service.dart';
 import '../services/sound_service.dart';
 import '../models/pet.dart';
 import '../models/watch_data.dart';
@@ -85,29 +86,6 @@ class _HomeTabState extends State<_HomeTab> {
   void initState() {
     super.initState();
     _getCurrentLocation();
-  }
-
-  // Calculate distance between two points in meters using Haversine formula
-  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const double earthRadius = 6371000; // Earth's radius in meters
-    final double dLat = (lat2 - lat1) * pi / 180;
-    final double dLon = (lon2 - lon1) * pi / 180;
-    final double a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) *
-        sin(dLon / 2) * sin(dLon / 2);
-    final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return earthRadius * c;
-  }
-
-  // Check if pet is within geofence radius
-  bool _isPetWithinGeofence(LatLng petLocation, Geofence geofence) {
-    final distance = _calculateDistance(
-      petLocation.latitude,
-      petLocation.longitude,
-      geofence.latitude,
-      geofence.longitude,
-    );
-    return distance <= geofence.radius;
   }
 
   // Show alert dialog when pet is outside geofence
@@ -306,31 +284,29 @@ class _HomeTabState extends State<_HomeTab> {
                         builder: (context, geofenceSnapshot) {
                           final geofences = geofenceSnapshot.data ?? [];
                           
-                          // Get pet's actual location from watch data
-                          return StreamBuilder<WatchData?>(
-                            stream: pet.id != null ? WatchDataService.getLatestWatchDataForPet(pet.id!) : Stream.value(null),
-                            builder: (context, watchDataSnapshot) {
-                              final watchData = watchDataSnapshot.data;
-                              
-                              // Determine pet location (from watch data or geofence center)
-                              final petLocation = (watchData?.latitude != null && watchData?.longitude != null)
-                                  ? LatLng(watchData!.latitude!, watchData.longitude!)
-                                  : (geofences.isNotEmpty
-                                      ? LatLng(geofences.first.latitude, geofences.first.longitude)
-                                      : const LatLng(3.1390, 101.6869));
+                          // Get pet's actual location from PetLocationService
+                          return StreamBuilder<LatLng?>(
+                            stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
+                            builder: (context, petLocationSnapshot) {
+                              final petLocation = petLocationSnapshot.data;
                               
                               // Check if pet is outside geofence
                               bool isOutside = false;
-                              if (geofences.isNotEmpty && watchData?.latitude != null && watchData?.longitude != null) {
-                                isOutside = !_isPetWithinGeofence(petLocation, geofences.first);
+                              if (geofences.isNotEmpty && petLocation != null) {
+                                isOutside = !GeofenceService.isPetWithinGeofence(petLocation, geofences.first);
                               }
                               
                               final userLocation = _currentPosition != null
                                   ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
-                                  : petLocation;
-                              final mapCenter = _currentPosition != null
-                                  ? userLocation
-                                  : petLocation;
+                                  : (petLocation ?? const LatLng(3.1390, 101.6869));
+                              LatLng mapCenter;
+                              if (_currentPosition != null && _currentPosition!.latitude.isFinite && _currentPosition!.longitude.isFinite) {
+                                mapCenter = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+                              } else if (petLocation != null && petLocation.latitude.isFinite && petLocation.longitude.isFinite) {
+                                mapCenter = petLocation;
+                              } else {
+                                mapCenter = const LatLng(3.1390, 101.6869);
+                              }
                               
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,13 +399,18 @@ class _HomeTabState extends State<_HomeTab> {
                                           // Geofence circles
                                           if (geofences.isNotEmpty)
                                             CircleLayer(
-                                              circles: geofences.map((g) => CircleMarker(
-                                                point: LatLng(g.latitude, g.longitude),
-                                                radius: g.radius,
-                                                color: isOutside && !_isOnWalk ? AppColors.alertRed.withValues(alpha: 0.2) : AppColors.primaryTeal.withValues(alpha: 0.2),
-                                                borderColor: isOutside && !_isOnWalk ? AppColors.alertRed : AppColors.primaryTeal,
-                                                borderStrokeWidth: 2,
-                                              )).toList(),
+                                              circles: geofences.map((g) {
+                                                final lat = g.latitude;
+                                                final lng = g.longitude;
+                                                if (!lat.isFinite || !lng.isFinite) return null;
+                                                return CircleMarker(
+                                                  point: LatLng(lat, lng),
+                                                  radius: g.radius,
+                                                  color: isOutside && !_isOnWalk ? AppColors.alertRed.withValues(alpha: 0.2) : AppColors.primaryTeal.withValues(alpha: 0.2),
+                                                  borderColor: isOutside && !_isOnWalk ? AppColors.alertRed : AppColors.primaryTeal,
+                                                  borderStrokeWidth: 2,
+                                                );
+                                              }).whereType<CircleMarker>().toList(),
                                             ),
                                           // User location marker
                                           MarkerLayer(
@@ -453,6 +434,7 @@ class _HomeTabState extends State<_HomeTab> {
                                             ],
                                           ),
                                           // Pet location marker
+                                          if (petLocation != null)
                                           MarkerLayer(
                                             markers: [
                                               Marker(

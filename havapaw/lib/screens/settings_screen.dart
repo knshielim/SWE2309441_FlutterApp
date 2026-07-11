@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
-import 'bluetooth_screen.dart';
 import 'manual_watch_data_screen.dart';
 import 'account_settings_screen.dart';
 import 'language_screen.dart';
@@ -13,6 +12,7 @@ import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 import 'notification_settings_screen.dart';
 import 'sound_settings_screen.dart';
+import 'pet_location_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -308,10 +308,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Preferences
           _SectionHeader('preferences'.tr()),
           _SettingsTile(
-            icon: Icons.bluetooth_rounded,
-            label: 'smartwatch_connection'.tr(),
+            icon: Icons.location_on_rounded,
+            label: 'set_pet_location'.tr(),
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const BluetoothScreen()));
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const PetLocationScreen()));
             },
           ),
           _SettingsTile(
