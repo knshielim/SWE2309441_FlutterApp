@@ -19,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   String? _errorMessage;
  
+  // Signs in with email and password.
   Future<void> _login() async {
     setState(() {
       _isLoading = true;
@@ -42,6 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Opens a dialog to send a password reset email.
   Future<void> _resetPassword() async {
     final emailController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -103,6 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // Signs in with a Google account.
   Future<void> _signInWithGoogle() async {
     setState(() {
       _isLoading = true;

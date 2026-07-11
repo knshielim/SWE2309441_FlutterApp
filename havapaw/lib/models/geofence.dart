@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 class Geofence {
   final String? id;
   final String petId;
@@ -21,6 +19,7 @@ class Geofence {
     required this.createdAt,
   });
 
+  // Converts this geofence to a map for Firebase storage.
   Map<String, dynamic> toMap() {
     return {
       'petId': petId,
@@ -33,6 +32,7 @@ class Geofence {
     };
   }
 
+  // Creates a Geofence from Firebase document data.
   factory Geofence.fromMap(Map<String, dynamic> map, String docId) {
     return Geofence(
       id: docId,
@@ -44,32 +44,5 @@ class Geofence {
       isActive: map['isActive'] ?? true,
       createdAt: DateTime.parse(map['createdAt'] ?? DateTime.now().toIso8601String()),
     );
-  }
-
-  // Check if a point is within the geofence
-  bool containsPoint(double lat, double lng) {
-    final distance = _calculateDistance(latitude, longitude, lat, lng);
-    return distance <= radius;
-  }
-
-  // Calculate distance between two points in meters using Haversine formula
-  double _calculateDistance(double lat1, double lng1, double lat2, double lng2) {
-    const double earthRadius = 6371000; // Earth's radius in meters
-    
-    final double dLat = _toRadians(lat2 - lat1);
-    final double dLng = _toRadians(lng2 - lng1);
-    
-    final double a = 
-        math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_toRadians(lat1)) * math.cos(_toRadians(lat2)) *
-        math.sin(dLng / 2) * math.sin(dLng / 2);
-    
-    final double c = 2 * math.asin(math.sqrt(a));
-    
-    return earthRadius * c;
-  }
-
-  double _toRadians(double degrees) {
-    return degrees * math.pi / 180;
   }
 }

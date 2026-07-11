@@ -22,6 +22,7 @@ class ProfileScreen extends StatefulWidget {
  
 class _ProfileScreenState extends State<ProfileScreen> {
  
+  // Opens the form to add or edit a pet.
   void _showPetForm({Pet? pet}) {
     showModalBottomSheet(
       context: context,
@@ -41,6 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
  
+  // Asks the user to confirm before removing a pet.
   void _confirmDelete(String petId, String petName, List<String> allPetIds) {
     showDialog(
       context: context,
@@ -362,6 +364,7 @@ class _PetProfileCard extends StatelessWidget {
     );
   }
  
+  // Calculates the pet's age from its birthday string.
   String _calcAge(String birthday) {
     try {
       final dob = DateTime.parse(birthday);
@@ -611,6 +614,7 @@ class _PetFormSheetState extends State<_PetFormSheet> {
     super.dispose();
   }
  
+  // Saves the pet form to Firebase.
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -651,6 +655,7 @@ class _PetFormSheetState extends State<_PetFormSheet> {
     setState(() => _isLoading = false);
   }
 
+  // Opens the gallery so the user can pick a pet photo.
   Future<void> _pickImage() async {
     try {
       final XFile? image = await _imagePicker.pickImage(

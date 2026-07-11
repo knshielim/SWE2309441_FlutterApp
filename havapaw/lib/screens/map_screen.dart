@@ -7,14 +7,14 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../theme/app_theme.dart';
-import '../services/watch_data_service.dart';
 import '../services/pet_service.dart';
 import '../services/geofence_service.dart';
 import '../services/pet_location_service.dart';
-import '../models/watch_data.dart';
 import '../models/pet.dart';
 import '../models/geofence.dart';
+import '../utils/map_defaults.dart';
 import 'settings_screen.dart';
+import 'pet_location_screen.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -23,9 +23,7 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-// Clamp coordinates to valid world ranges.
-// Top-level so it can be used by any State class in this file
-// (e.g. both _MapScreenState and _GeofenceFormSheetState).
+// Keeps map coordinates inside valid latitude and longitude ranges.
 LatLng _clampCoordinates(double lat, double lng) {
   final clampedLat = lat.clamp(-85.0, 85.0);
   final clampedLng = lng.clamp(-180.0, 180.0);
@@ -41,11 +39,9 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _getCurrentLocation();
-    });
   }
 
+  // Gets the user's current GPS location and centers the map.
   Future<void> _getCurrentLocation() async {
     setState(() => _isLoadingLocation = true);
     try {
@@ -90,14 +86,12 @@ class _MapScreenState extends State<MapScreen> {
         if (lat.isFinite && lng.isFinite) {
           setState(() {
             _currentPosition = position;
-            _isLoadingLocation = false;
           });
           _mapController.move(
             _clampCoordinates(lat, lng),
-            15,
+            kFocusedMapZoom,
           );
         } else {
-          setState(() => _isLoadingLocation = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Invalid location coordinates'.tr())),
           );
@@ -105,14 +99,16 @@ class _MapScreenState extends State<MapScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoadingLocation = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error getting location: $e')),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoadingLocation = false);
     }
   }
 
+  // Opens the safe zone setup form.
   void _showGeofenceForm({required String petId, List<Geofence>? geofences}) {
     showModalBottomSheet(
       context: context,
@@ -256,40 +252,49 @@ class _MapScreenState extends State<MapScreen> {
                   if (_activePetIndex >= pets.length) _activePetIndex = 0;
                   final pet = pets[_activePetIndex];
 
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: StreamBuilder<List<Geofence>>(
-                          stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
-                          builder: (context, geofenceSnapshot) {
-                            final geofences = geofenceSnapshot.data ?? [];
-                            return _buildInteractiveMap(pet, geofences);
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Location info
-                      StreamBuilder<LatLng?>(
-                        stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
-                        builder: (context, snapshot) {
-                          final petLocation = snapshot.data;
-                          
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: _LocationCard(
-                                  icon: Icons.location_history_rounded,
-                                  label: 'last_known'.tr(),
-                                  value: petLocation != null && petLocation.latitude.isFinite && petLocation.longitude.isFinite
-                                      ? '${petLocation.latitude.toStringAsFixed(4)}, ${petLocation.longitude.toStringAsFixed(4)}'
-                                      : 'not_set'.tr(),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
+                  return StreamBuilder<LatLng?>(
+                    stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
+                    builder: (context, petLocationSnapshot) {
+                      final petLocation = petLocationSnapshot.data;
+                      final hasUserLocation = _currentPosition != null &&
+                          _currentPosition!.latitude.isFinite &&
+                          _currentPosition!.longitude.isFinite;
+                      final hasPetLocation = petLocation != null &&
+                          petLocation.latitude.isFinite &&
+                          petLocation.longitude.isFinite;
+
+                      return Column(
+                        children: [
+                          Expanded(
+                            child: StreamBuilder<List<Geofence>>(
+                              stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
+                              builder: (context, geofenceSnapshot) {
+                                final geofences = geofenceSnapshot.data ?? [];
+                                return _buildInteractiveMap(pet, geofences, petLocation);
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (!hasUserLocation && !hasPetLocation)
+                            _MapLocationHint(
+                              onSetPetLocation: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const PetLocationScreen()),
+                                );
+                              },
+                            )
+                          else
+                            _LocationCard(
+                              icon: Icons.location_history_rounded,
+                              label: 'last_known'.tr(),
+                              value: hasPetLocation
+                                  ? '${petLocation.latitude.toStringAsFixed(4)}, ${petLocation.longitude.toStringAsFixed(4)}'
+                                  : 'not_set'.tr(),
+                            ),
+                        ],
+                      );
+                    },
                   );
                 },
               ),
@@ -300,6 +305,7 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  // Shows a placeholder when no pets are added yet.
   Widget _buildPlaceholderMap() {
     return Container(
       decoration: BoxDecoration(
@@ -334,18 +340,30 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildInteractiveMap(Pet pet, List<Geofence> geofences) {
-    LatLng initialCenter;
-    if (_currentPosition != null) {
-      final lat = _currentPosition!.latitude;
-      final lng = _currentPosition!.longitude;
-      if (lat.isFinite && lng.isFinite) {
-        initialCenter = _clampCoordinates(lat, lng);
-      } else {
-        initialCenter = const LatLng(3.1390, 101.6869); // Default: Kuala Lumpur
+  // Builds the live map with geofence circles and location markers.
+  Widget _buildInteractiveMap(Pet pet, List<Geofence> geofences, LatLng? petLocation) {
+    final hasUserLocation = _currentPosition != null &&
+        _currentPosition!.latitude.isFinite &&
+        _currentPosition!.longitude.isFinite;
+    final hasPetLocation = petLocation != null &&
+        petLocation.latitude.isFinite &&
+        petLocation.longitude.isFinite;
+
+    LatLng mapCenter = kDefaultMapCenter;
+    double mapZoom = kDefaultMapZoom;
+
+    if (hasUserLocation) {
+      mapCenter = _clampCoordinates(_currentPosition!.latitude, _currentPosition!.longitude);
+      mapZoom = kFocusedMapZoom;
+    } else if (hasPetLocation) {
+      mapCenter = petLocation;
+      mapZoom = kFocusedMapZoom;
+    } else if (geofences.isNotEmpty) {
+      final geofence = geofences.first;
+      if (geofence.latitude.isFinite && geofence.longitude.isFinite) {
+        mapCenter = _clampCoordinates(geofence.latitude, geofence.longitude);
+        mapZoom = kFocusedMapZoom;
       }
-    } else {
-      initialCenter = const LatLng(3.1390, 101.6869); // Default: Kuala Lumpur
     }
 
     return ClipRRect(
@@ -355,8 +373,8 @@ class _MapScreenState extends State<MapScreen> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: initialCenter,
-              initialZoom: 15,
+              initialCenter: mapCenter,
+              initialZoom: mapZoom,
               minZoom: 4,
               maxZoom: 19,
               interactionOptions: const InteractionOptions(
@@ -424,14 +442,15 @@ class _MapScreenState extends State<MapScreen> {
                   );
                 }).whereType<Marker>().toList(),
               ),
-              // Current location marker
-              MarkerLayer(
-                markers: [
-                  if (_currentPosition != null)
+              // User location marker
+              if (hasUserLocation)
+                MarkerLayer(
+                  markers: [
                     Marker(
-                      point: _currentPosition!.latitude.isFinite && _currentPosition!.longitude.isFinite
-                          ? _clampCoordinates(_currentPosition!.latitude, _currentPosition!.longitude)
-                          : initialCenter,
+                      point: _clampCoordinates(
+                        _currentPosition!.latitude,
+                        _currentPosition!.longitude,
+                      ),
                       width: 50,
                       height: 50,
                       child: Container(
@@ -446,58 +465,37 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                     ),
-                ],
-              ),
-              // Owner location marker
-              MarkerLayer(
-                markers: [
-                  if (_currentPosition != null && _currentPosition!.latitude.isFinite && _currentPosition!.longitude.isFinite)
+                  ],
+                ),
+              // Pet location marker
+              if (hasPetLocation)
+                MarkerLayer(
+                  markers: [
                     Marker(
-                      point: _clampCoordinates(_currentPosition!.latitude, _currentPosition!.longitude),
+                      point: petLocation,
                       width: 50,
                       height: 50,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.person_rounded,
-                          color: Colors.blue,
-                          size: 30,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              // Pet location marker
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: initialCenter,
-                    width: 50,
-                    height: 50,
-                    child: GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(pet.name)),
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryTeal.withValues(alpha: 0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.pets_rounded,
-                          color: AppColors.primaryTeal,
-                          size: 30,
+                      child: GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(pet.name)),
+                          );
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryTeal.withValues(alpha: 0.3),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.pets_rounded,
+                            color: AppColors.primaryTeal,
+                            size: 30,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ),
           // Floating action button to recenter
@@ -518,6 +516,60 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     )
                   : const Icon(Icons.my_location, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MapLocationHint extends StatelessWidget {
+  final VoidCallback onSetPetLocation;
+
+  const _MapLocationHint({required this.onSetPetLocation});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.lightTeal,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primaryTeal.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline_rounded, color: AppColors.primaryTeal, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'map_location_hint'.tr(),
+                  style: const TextStyle(fontSize: 13, color: AppColors.slateDark, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: onSetPetLocation,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'set_pet_location'.tr(),
+              style: const TextStyle(
+                color: AppColors.primaryTeal,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
             ),
           ),
         ],
@@ -598,12 +650,9 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
       final geoLng = _editingGeofence!.longitude;
       _selectedLocation = (geoLat.isFinite && geoLng.isFinite)
           ? _clampCoordinates(geoLat, geoLng)
-          : const LatLng(3.1390, 101.6869); // Default: Kuala Lumpur
+          : null;
       _radius = _editingGeofence!.radius;
       _radiusCtrl.text = _radius.round().toString();
-    } else {
-      // Default to current location or KL
-      _selectedLocation = const LatLng(3.1390, 101.6869);
     }
   }
 
@@ -758,8 +807,8 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                 FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
-                    initialCenter: _selectedLocation ?? const LatLng(3.1390, 101.6869),
-                    initialZoom: 15,
+                    initialCenter: _selectedLocation ?? kDefaultMapCenter,
+                    initialZoom: _selectedLocation != null ? kFocusedMapZoom : kDefaultMapZoom,
                     minZoom: 4,
                     maxZoom: 19,
                     interactionOptions: const InteractionOptions(

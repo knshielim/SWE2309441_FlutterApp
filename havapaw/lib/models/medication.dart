@@ -1,5 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
+// Represents a medication reminder for a pet.
 class Medication {
   final String? id;
   final String petId;
@@ -9,7 +8,7 @@ class Medication {
   final String? notes;
   final DateTime startDate;
   final DateTime? endDate;
-  final List<int> reminderTimes; // List of hour values (e.g., [8, 12, 18] for 8am, 12pm, 6pm)
+  final List<int> reminderTimes;
   final bool isActive;
 
   Medication({
@@ -25,6 +24,7 @@ class Medication {
     this.isActive = true,
   });
 
+  // Converts this medication to a map for Firebase storage.
   Map<String, dynamic> toMap() {
     return {
       'petId': petId,
@@ -39,6 +39,7 @@ class Medication {
     };
   }
 
+  // Creates a Medication object from Firebase document data.
   factory Medication.fromMap(Map<String, dynamic> map, String docId) {
     return Medication(
       id: docId,
@@ -47,17 +48,11 @@ class Medication {
       dosage: map['dosage'] ?? '',
       frequency: map['frequency'] ?? '',
       notes: map['notes'],
-      startDate: map['startDate'] is String 
-          ? DateTime.parse(map['startDate'] ?? DateTime.now().toIso8601String())
-          : (map['startDate'] as Timestamp).toDate(),
-      endDate: map['endDate'] != null 
-          ? (map['endDate'] is String 
-              ? DateTime.parse(map['endDate'])
-              : (map['endDate'] as Timestamp).toDate())
-          : null,
-      reminderTimes: map['reminderTimes'] != null 
+      startDate: DateTime.parse(map['startDate'] ?? DateTime.now().toIso8601String()),
+      endDate: map['endDate'] != null ? DateTime.parse(map['endDate']) : null,
+      reminderTimes: map['reminderTimes'] != null
           ? List<int>.from(map['reminderTimes'])
-          : (map['timeOfDay'] != null ? [int.tryParse(map['timeOfDay'].toString()) ?? 0] : []),
+          : [],
       isActive: map['isActive'] ?? true,
     );
   }

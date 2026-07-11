@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
+// Bottom navigation bar for Home, Health, Map, and Profile tabs.
 class BottomNav extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -43,6 +44,7 @@ class BottomNav extends StatelessWidget {
   }
 }
 
+// One tab button in the bottom navigation bar.
 class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;

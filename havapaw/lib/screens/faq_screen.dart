@@ -27,7 +27,7 @@ class FAQScreen extends StatelessWidget {
 
             _FAQItem(
               question: 'What is HavaPaw?',
-              answer: 'HavaPaw is a smart pet tracking application that helps you monitor your pet\'s health, activity, and location. You can connect a smartwatch or manually enter data to track your pet\'s wellness journey.',
+              answer: 'HavaPaw is a smart pet tracking application that helps you monitor your pet\'s health, activity, and location. You can manually enter collar data and set your pet\'s location to track your pet\'s wellness journey.',
             ),
             _FAQItem(
               question: 'How do I add a pet?',
@@ -38,12 +38,12 @@ class FAQScreen extends StatelessWidget {
               answer: 'Yes! You can add and manage multiple pets. Use the navigation arrows in the pet card to switch between your pets.',
             ),
             _FAQItem(
-              question: 'How do I connect a smartwatch?',
-              answer: 'Go to Settings → Smartwatch Connection. Enable Bluetooth permissions, scan for devices, and connect to your compatible smartwatch. Data will sync automatically when connected.',
+              question: 'How do I add collar health data?',
+              answer: 'Go to Settings → Manual Data Entry. Enter steps, heart rate, distance, and temperature, then save. The data will be stored in Firebase and shown on the Home and Health screens.',
             ),
             _FAQItem(
-              question: 'What if my smartwatch isn\'t compatible?',
-              answer: 'You can use the Manual Watch Data Entry feature in Settings. Enter your watch data from the Laxasfit app manually, and it will sync to Firebase.',
+              question: 'How do I set my pet\'s location?',
+              answer: 'Go to Settings → Set Pet Location. Pick a spot on the map or use your current location, then save. You can also set a safe zone from the Map tab.',
             ),
             _FAQItem(
               question: 'How is my data stored?',

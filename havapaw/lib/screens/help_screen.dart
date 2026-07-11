@@ -109,7 +109,8 @@ const _features = [
 ];
 
 const _faqs = [
-  {'q': 'How do I connect my pet\'s collar?', 'a': 'Go to the Map screen and tap "Connect Collar". Make sure Bluetooth is enabled on your device and the collar is powered on.'},
+  {'q': 'How do I add collar health data?', 'a': 'Go to Settings → Manual Data Entry. Enter your pet\'s steps, heart rate, distance, and temperature, then tap Save.'},
+  {'q': 'How do I set my pet\'s location?', 'a': 'Go to Settings → Set Pet Location. Tap the map to choose a spot or use your current location, then save it.'},
   {'q': 'Can I add multiple pets?', 'a': 'Yes! Tap "Add Pet" on the Profile screen to add as many pets as you need. You can switch between them using the arrow buttons.'},
   {'q': 'How do I set up a safe zone?', 'a': 'Go to the Map screen, then tap "Safe Zone Settings". You can draw a custom radius on the map around your home or any location.'},
   {'q': 'What does the health score mean?', 'a': 'The health score (0–100) is calculated from your pet\'s heart rate, temperature, activity level, and sleep patterns over the past 24 hours.'},

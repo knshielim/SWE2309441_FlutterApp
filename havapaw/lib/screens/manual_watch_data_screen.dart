@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
-import '../services/bluetooth_service.dart';
+import '../services/watch_data_service.dart';
 import '../models/watch_data.dart';
 import '../models/pet.dart';
 import '../services/pet_service.dart';
@@ -15,8 +15,6 @@ class ManualWatchDataScreen extends StatefulWidget {
 
 class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _bluetoothService = BluetoothService();
-  
   final _stepsController = TextEditingController();
   final _heartRateController = TextEditingController();
   final _distanceController = TextEditingController();
@@ -77,7 +75,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
         petId: _selectedPetId,
       );
 
-      await _bluetoothService.syncWatchData(watchData);
+      await WatchDataService.saveWatchData(watchData);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

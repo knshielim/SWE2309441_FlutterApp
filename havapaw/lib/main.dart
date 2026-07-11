@@ -12,6 +12,7 @@ import 'services/notification_service.dart';
 import 'services/selected_pet_service.dart';
 import 'services/sound_service.dart';
 
+// Starts the app and loads Firebase, language, and saved settings.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -21,28 +22,27 @@ void main() async {
   await NotificationService.initialize();
   await SelectedPetService.loadSelectedPetId();
   await SoundService.init();
-  
+
   final prefs = await SharedPreferences.getInstance();
   final savedLangCode = prefs.getString('language_code') ?? 'en';
   Locale initialLocale = const Locale('en', 'US');
-  
-  switch (savedLangCode) {
-    case 'id':
-      initialLocale = const Locale('id', 'ID');
-      break;
-    case 'ms':
-      initialLocale = const Locale('ms', 'MY');
-      break;
-    case 'zh':
-      initialLocale = const Locale('zh', 'CN');
-      break;
-    default:
-      initialLocale = const Locale('en', 'US');
+
+  if (savedLangCode == 'id') {
+    initialLocale = const Locale('id', 'ID');
+  } else if (savedLangCode == 'ms') {
+    initialLocale = const Locale('ms', 'MY');
+  } else if (savedLangCode == 'zh') {
+    initialLocale = const Locale('zh', 'CN');
   }
-  
+
   runApp(
     EasyLocalization(
-      supportedLocales: const [Locale('en', 'US'), Locale('id', 'ID'), Locale('ms', 'MY'), Locale('zh', 'CN')],
+      supportedLocales: const [
+        Locale('en', 'US'),
+        Locale('id', 'ID'),
+        Locale('ms', 'MY'),
+        Locale('zh', 'CN'),
+      ],
       path: 'assets/translations',
       fallbackLocale: const Locale('en', 'US'),
       startLocale: initialLocale,
@@ -51,6 +51,7 @@ void main() async {
   );
 }
 
+// Root widget that shows Login or Home based on auth state.
 class HavaPawApp extends StatelessWidget {
   const HavaPawApp({super.key});
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
- 
+
+// App color constants used across all screens.
 class AppColors {
   static const Color primaryTeal = Color(0xFF0F9B8E);
   static const Color darkTeal = Color(0xFF0A6F65);
@@ -13,7 +14,8 @@ class AppColors {
   static const Color textGrey = Color(0xFF64748B);
   static const Color divider = Color(0xFFE2E8F0);
 }
- 
+
+// Builds the shared app theme for buttons, inputs, and cards.
 class AppTheme {
   static ThemeData get theme {
     return ThemeData(

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/medication.dart';
 
+// Handles adding, reading, updating, and deleting medications.
 class MedicationService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -11,65 +12,40 @@ class MedicationService {
   static CollectionReference get _medicationsRef =>
       _db.collection('users').doc(_uid).collection('medications');
 
-  // Add a new medication (Create)
+  // Adds a new medication to Firebase.
   static Future<void> addMedication(Medication medication) async {
-    try {
-      await _medicationsRef.add({
-        ...medication.toMap(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      print('Medication added');
-    } catch (e) {
-      print('Error adding medication: $e');
-    }
+    await _medicationsRef.add({
+      ...medication.toMap(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  // Read all medications (Retrieve)
-  static Stream<QuerySnapshot> getMedicationsStream() {
-    return _medicationsRef.orderBy('startDate', descending: true).snapshots();
-  }
-
-  // Read medications for a specific pet (Retrieve)
+  // Returns medications for one pet.
   static Stream<QuerySnapshot> getMedicationsForPetStream(String petId) {
     return _medicationsRef.where('petId', isEqualTo: petId).snapshots();
   }
 
-  // Edit an existing medication (Update)
+  // Updates an existing medication.
   static Future<void> updateMedication(
     String medicationId,
     Map<String, dynamic> data,
   ) async {
-    try {
-      await _medicationsRef.doc(medicationId).update({
-        ...data,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      print('Medication updated: $medicationId');
-    } catch (e) {
-      print('Error updating medication: $e');
-    }
+    await _medicationsRef.doc(medicationId).update({
+      ...data,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  // Remove a medication (Delete)
+  // Deletes a medication from Firebase.
   static Future<void> deleteMedication(String medicationId) async {
-    try {
-      await _medicationsRef.doc(medicationId).delete();
-      print('Medication deleted: $medicationId');
-    } catch (e) {
-      print('Error deleting medication: $e');
-    }
+    await _medicationsRef.doc(medicationId).delete();
   }
 
-  // Toggle medication active status
+  // Turns a medication reminder on or off.
   static Future<void> toggleMedicationStatus(
     String medicationId,
     bool isActive,
   ) async {
-    try {
-      await _medicationsRef.doc(medicationId).update({'isActive': isActive});
-      print('Medication status updated: $medicationId');
-    } catch (e) {
-      print('Error updating medication status: $e');
-    }
+    await _medicationsRef.doc(medicationId).update({'isActive': isActive});
   }
 }

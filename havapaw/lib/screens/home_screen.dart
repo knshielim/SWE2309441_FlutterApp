@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'dart:math';
 import 'dart:convert';
 import '../widgets/bottom_nav.dart';
 import '../theme/app_theme.dart';
@@ -18,6 +17,7 @@ import '../services/sound_service.dart';
 import '../models/pet.dart';
 import '../models/watch_data.dart';
 import '../models/geofence.dart';
+import '../utils/map_defaults.dart';
 import 'health_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
@@ -40,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ProfileScreen(),
   ];
 
+  // Starts background music when the home screen opens.
   @override
   void initState() {
     super.initState();
@@ -48,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // Stops background music when leaving the home screen.
   @override
   void dispose() {
     SoundService.stopBackgroundMusic();
@@ -88,7 +90,7 @@ class _HomeTabState extends State<_HomeTab> {
     _getCurrentLocation();
   }
 
-  // Show alert dialog when pet is outside geofence
+  // Shows a warning when the pet leaves the safe zone.
   void _showGeofenceAlertDialog() {
     showDialog(
       context: context,
@@ -120,6 +122,7 @@ class _HomeTabState extends State<_HomeTab> {
     );
   }
 
+  // Gets the user's current GPS location for the map preview.
   Future<void> _getCurrentLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -144,6 +147,7 @@ class _HomeTabState extends State<_HomeTab> {
     }
   }
 
+  // Calculates a simple health score from watch data.
   int _calculateHealthScore(WatchData data) {
     int score = 100;
     
@@ -289,23 +293,33 @@ class _HomeTabState extends State<_HomeTab> {
                             stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
                             builder: (context, petLocationSnapshot) {
                               final petLocation = petLocationSnapshot.data;
-                              
+                              final hasUserLocation = _currentPosition != null &&
+                                  _currentPosition!.latitude.isFinite &&
+                                  _currentPosition!.longitude.isFinite;
+                              final hasPetLocation = petLocation != null &&
+                                  petLocation.latitude.isFinite &&
+                                  petLocation.longitude.isFinite;
+
                               // Check if pet is outside geofence
                               bool isOutside = false;
-                              if (geofences.isNotEmpty && petLocation != null) {
+                              if (geofences.isNotEmpty && hasPetLocation) {
                                 isOutside = !GeofenceService.isPetWithinGeofence(petLocation, geofences.first);
                               }
-                              
-                              final userLocation = _currentPosition != null
-                                  ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
-                                  : (petLocation ?? const LatLng(3.1390, 101.6869));
-                              LatLng mapCenter;
-                              if (_currentPosition != null && _currentPosition!.latitude.isFinite && _currentPosition!.longitude.isFinite) {
+
+                              LatLng mapCenter = kDefaultMapCenter;
+                              double mapZoom = kDefaultMapZoom;
+                              if (hasUserLocation) {
                                 mapCenter = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
-                              } else if (petLocation != null && petLocation.latitude.isFinite && petLocation.longitude.isFinite) {
+                                mapZoom = 14;
+                              } else if (hasPetLocation) {
                                 mapCenter = petLocation;
-                              } else {
-                                mapCenter = const LatLng(3.1390, 101.6869);
+                                mapZoom = 14;
+                              } else if (geofences.isNotEmpty) {
+                                final geofence = geofences.first;
+                                if (geofence.latitude.isFinite && geofence.longitude.isFinite) {
+                                  mapCenter = LatLng(geofence.latitude, geofence.longitude);
+                                  mapZoom = 14;
+                                }
                               }
                               
                               return Column(
@@ -384,7 +398,7 @@ class _HomeTabState extends State<_HomeTab> {
                                       child: FlutterMap(
                                         options: MapOptions(
                                           initialCenter: mapCenter,
-                                          initialZoom: 14,
+                                          initialZoom: mapZoom,
                                           minZoom: 4,
                                           maxZoom: 18,
                                           interactionOptions: const InteractionOptions(
@@ -413,32 +427,33 @@ class _HomeTabState extends State<_HomeTab> {
                                               }).whereType<CircleMarker>().toList(),
                                             ),
                                           // User location marker
-                                          MarkerLayer(
-                                            markers: [
-                                              Marker(
-                                                point: userLocation,
-                                                width: 30,
-                                                height: 30,
-                                                child: Container(
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.blue.withValues(alpha: 0.3),
-                                                    shape: BoxShape.circle,
-                                                  ),
-                                                  child: const Icon(
-                                                    Icons.my_location_rounded,
-                                                    color: Colors.blue,
-                                                    size: 16,
+                                          if (hasUserLocation)
+                                            MarkerLayer(
+                                              markers: [
+                                                Marker(
+                                                  point: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                                                  width: 30,
+                                                  height: 30,
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.blue.withValues(alpha: 0.3),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.my_location_rounded,
+                                                      color: Colors.blue,
+                                                      size: 16,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
-                                            ],
-                                          ),
+                                              ],
+                                            ),
                                           // Pet location marker
-                                          if (petLocation != null)
-                                          MarkerLayer(
-                                            markers: [
-                                              Marker(
-                                                point: petLocation,
+                                          if (hasPetLocation)
+                                            MarkerLayer(
+                                              markers: [
+                                                Marker(
+                                                  point: petLocation,
                                                 width: 30,
                                                 height: 30,
                                                 child: Container(
@@ -459,6 +474,13 @@ class _HomeTabState extends State<_HomeTab> {
                                       ),
                                     ),
                                   ),
+                                  if (!hasUserLocation && !hasPetLocation) ...[
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'map_location_hint'.tr(),
+                                      style: const TextStyle(fontSize: 12, color: AppColors.textGrey, height: 1.4),
+                                    ),
+                                  ],
                                 ],
                               );
                             },

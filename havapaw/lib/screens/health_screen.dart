@@ -21,6 +21,7 @@ class HealthScreen extends StatefulWidget {
 class _HealthScreenState extends State<HealthScreen> {
   int _activePetIndex = 0;
 
+  // Opens the form to add or edit a medication.
   void _showMedicationForm({Medication? medication, required String petId}) {
     if (petId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -47,6 +48,7 @@ class _HealthScreenState extends State<HealthScreen> {
     );
   }
 
+  // Asks the user to confirm before deleting a medication.
   void _confirmDeleteMedication(String medicationId) {
     showDialog(
       context: context,
@@ -77,8 +79,8 @@ class _HealthScreenState extends State<HealthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final _user = FirebaseAuth.instance.currentUser;
-    final fullName = _user?.displayName ?? 'there';
+    final user = FirebaseAuth.instance.currentUser;
+    final fullName = user?.displayName ?? 'there';
     final firstName = fullName.split(' ')[0];
     
     return SafeArea(
@@ -285,24 +287,6 @@ class _HealthContent extends StatelessWidget {
                   ),
                 ),
               )
-            else if (petId.isEmpty)
-              _InfoCard(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, size: 40, color: AppColors.textGrey.withValues(alpha: 0.5)),
-                        const SizedBox(height: 12),
-                        Text(
-                          'pet_id_missing'.tr(),
-                          style: const TextStyle(fontSize: 14, color: AppColors.textGrey),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
             else
               StreamBuilder<QuerySnapshot>(
                 stream: MedicationService.getMedicationsForPetStream(petId),
@@ -317,7 +301,6 @@ class _HealthContent extends StatelessWidget {
                   }
                   
                   if (snapshot.hasError) {
-                    print('Error loading medications: ${snapshot.error}');
                     return _InfoCard(
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -439,6 +422,7 @@ class _OverallHealthCard extends StatelessWidget {
     );
   }
 
+  // Returns true when heart rate and temperature are in a normal range.
   bool _isHealthNormal(WatchData? data) {
     if (data == null) return false;
     // Simple health check logic
@@ -665,6 +649,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     super.dispose();
   }
 
+  // Saves the medication form to Firebase.
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -826,6 +811,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     );
   }
 
+  // Opens a date picker for the medication start date.
   Future<void> _selectStartDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -838,6 +824,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     }
   }
 
+  // Opens a date picker for the optional medication end date.
   Future<void> _selectEndDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,

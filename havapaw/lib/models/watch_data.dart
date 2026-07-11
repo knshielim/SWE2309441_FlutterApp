@@ -9,9 +9,9 @@ class WatchData {
   final double? temperature;
   final int? batteryLevel; // 0-100
   final DateTime timestamp;
-  final String? petId; // Optional: associate with specific pet
-  final double? latitude; // Pet's GPS latitude
-  final double? longitude; // Pet's GPS longitude
+  final String? petId;
+  final double? latitude;
+  final double? longitude;
 
   WatchData({
     this.id,
@@ -29,6 +29,7 @@ class WatchData {
     this.longitude,
   });
 
+  // Converts this reading to a map for Firebase storage.
   Map<String, dynamic> toMap() {
     return {
       'deviceId': deviceId,
@@ -46,6 +47,7 @@ class WatchData {
     };
   }
 
+  // Creates a WatchData object from Firebase document data.
   factory WatchData.fromMap(Map<String, dynamic> map, String docId) {
     return WatchData(
       id: docId,
@@ -62,56 +64,5 @@ class WatchData {
       latitude: map['latitude']?.toDouble(),
       longitude: map['longitude']?.toDouble(),
     );
-  }
-
-  // Parse raw Bluetooth data from smartwatch
-  // This is a generic parser - you'll need to customize based on your specific watch protocol
-  static WatchData? parseBluetoothData(
-    List<int> data,
-    String deviceId,
-    String deviceName,
-    {String? petId}
-  ) {
-    try {
-      // Example parsing logic - customize based on your watch's data protocol
-      // This is a placeholder implementation
-      
-      if (data.isEmpty) return null;
-      
-      // Generic parsing example (adjust based on actual protocol)
-      final timestamp = DateTime.now();
-      
-      // Parse based on expected data format
-      // This is highly dependent on the specific smartwatch protocol
-      int? steps;
-      int? heartRate;
-      double? distance;
-      int? calories;
-      double? temperature;
-      
-      // Example: If data is in specific byte positions
-      if (data.length >= 8) {
-        // This is just example logic - replace with actual protocol
-        steps = (data[0] << 8) | data[1];
-        heartRate = data[2];
-        distance = ((data[3] << 8) | data[4]) / 100.0;
-        calories = (data[5] << 8) | data[6];
-        temperature = data[7] / 10.0;
-      }
-      
-      return WatchData(
-        deviceId: deviceId,
-        deviceName: deviceName,
-        steps: steps,
-        heartRate: heartRate,
-        distance: distance,
-        calories: calories,
-        temperature: temperature,
-        timestamp: timestamp,
-        petId: petId,
-      );
-    } catch (e) {
-      return null;
-    }
   }
 }

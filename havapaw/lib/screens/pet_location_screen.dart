@@ -7,6 +7,7 @@ import 'package:geocoding/geocoding.dart';
 import '../theme/app_theme.dart';
 import '../services/pet_location_service.dart';
 import '../services/selected_pet_service.dart';
+import '../utils/map_defaults.dart';
 
 class PetLocationScreen extends StatefulWidget {
   const PetLocationScreen({super.key});
@@ -18,23 +19,17 @@ class PetLocationScreen extends StatefulWidget {
 class _PetLocationScreenState extends State<PetLocationScreen> {
   final MapController _mapController = MapController();
   LatLng? _selectedLocation;
-  Position? _currentPosition;
   bool _isLoading = false;
   String _address = '';
 
-  // Clamp coordinates to valid world ranges
+  // Keeps map coordinates inside valid latitude and longitude ranges.
   LatLng _clampCoordinates(double lat, double lng) {
     final clampedLat = lat.clamp(-85.0, 85.0);
     final clampedLng = lng.clamp(-180.0, 180.0);
     return LatLng(clampedLat, clampedLng);
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _getCurrentLocation();
-  }
-
+  // Gets the user's current GPS location and moves the map there.
   Future<void> _getCurrentLocation() async {
     setState(() => _isLoading = true);
     try {
@@ -73,16 +68,15 @@ class _PetLocationScreenState extends State<PetLocationScreen> {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      
+
       if (mounted) {
         final lat = position.latitude;
         final lng = position.longitude;
         if (lat.isFinite && lng.isFinite) {
           setState(() {
-            _currentPosition = position;
             _selectedLocation = _clampCoordinates(lat, lng);
           });
-          _mapController.move(_selectedLocation!, 15.0);
+          _mapController.move(_selectedLocation!, kFocusedMapZoom);
           _getAddressFromCoordinates(_selectedLocation!);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -90,13 +84,14 @@ class _PetLocationScreenState extends State<PetLocationScreen> {
           );
         }
       }
-    } catch (e) {
-      print('Error getting location: $e');
+    } catch (_) {
+      // Location may be unavailable on some devices.
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // Converts map coordinates into a readable street address.
   Future<void> _getAddressFromCoordinates(LatLng location) async {
     try {
       List<Placemark> placemarks = await placemarkFromCoordinates(
@@ -109,11 +104,12 @@ class _PetLocationScreenState extends State<PetLocationScreen> {
           _address = '${place.street}, ${place.locality}, ${place.country}';
         });
       }
-    } catch (e) {
-      print('Error getting address: $e');
+    } catch (_) {
+      // Address lookup may fail for some coordinates.
     }
   }
 
+  // Saves the selected location for the current pet.
   Future<void> _saveLocation() async {
     if (_selectedLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -160,47 +156,41 @@ class _PetLocationScreenState extends State<PetLocationScreen> {
       body: Column(
         children: [
           Expanded(
-            child: _selectedLocation == null
-                ? const Center(child: CircularProgressIndicator())
-                : FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: _selectedLocation!,
-                      initialZoom: 15.0,
-                      onTap: (tapPosition, point) {
-                        setState(() {
-                          _selectedLocation = point;
-                        });
-                        _getAddressFromCoordinates(point);
-                      },
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.havapaw.app',
-                      ),
-                      if (_selectedLocation != null)
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: _selectedLocation!,
-                              width: 40,
-                              height: 40,
-                              child: GestureDetector(
-                                onTap: () {
-                                  _mapController.move(_selectedLocation!, 17.0);
-                                },
-                                child: const Icon(
-                                  Icons.pets,
-                                  color: AppColors.primaryTeal,
-                                  size: 40,
-                                ),
-                              ),
-                            ),
-                          ],
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: kDefaultMapCenter,
+                initialZoom: kDefaultMapZoom,
+                onTap: (tapPosition, point) {
+                  setState(() {
+                    _selectedLocation = point;
+                  });
+                  _getAddressFromCoordinates(point);
+                  _mapController.move(point, kFocusedMapZoom);
+                },
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.havapaw.app',
+                ),
+                if (_selectedLocation != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: _selectedLocation!,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(
+                          Icons.pets,
+                          color: AppColors.primaryTeal,
+                          size: 40,
                         ),
+                      ),
                     ],
                   ),
+              ],
+            ),
           ),
           Container(
             padding: const EdgeInsets.all(20),
@@ -217,29 +207,48 @@ class _PetLocationScreenState extends State<PetLocationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (_address.isNotEmpty)
-                  Column(
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightTeal,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.primaryTeal.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'selected_address'.tr(),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textGrey,
+                      const Icon(Icons.info_outline_rounded, color: AppColors.primaryTeal, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'map_tap_to_set_location'.tr(),
+                          style: const TextStyle(fontSize: 13, color: AppColors.slateDark, height: 1.4),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _address,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppColors.slateDark,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
                     ],
                   ),
+                ),
+                if (_address.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'selected_address'.tr(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textGrey,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _address,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.slateDark,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(

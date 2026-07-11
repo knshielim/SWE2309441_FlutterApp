@@ -13,13 +13,14 @@ const AndroidNotificationChannel _androidChannel = AndroidNotificationChannel(
   importance: Importance.max,
 );
 
+// Handles push notifications received while the app is in the background.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  print('Background message received: ${message.notification?.title}');
 }
 
+// Sets up Firebase and local notifications.
 class NotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _localNotifications =
@@ -27,6 +28,7 @@ class NotificationService {
 
   static String? fcmToken;
 
+  // Initializes notification permissions and listeners.
   static Future<void> initialize() async {
     await _requestPermissions();
     await _initializeLocalNotifications();
@@ -37,18 +39,13 @@ class NotificationService {
     FirebaseMessaging.instance.getInitialMessage().then(_handleInitialMessage);
   }
 
+  // Asks the user for notification permission.
   static Future<void> _requestPermissions() async {
-    final settings = await _messaging.requestPermission(
+    await _messaging.requestPermission(
       alert: true,
-      announcement: false,
       badge: true,
-      carPlay: false,
-      criticalAlert: false,
-      provisional: false,
       sound: true,
     );
-
-    print('Notification permission granted: ${settings.authorizationStatus}');
 
     final androidPlugin = _localNotifications
         .resolvePlatformSpecificImplementation<
@@ -60,6 +57,7 @@ class NotificationService {
     }
   }
 
+  // Sets up local notification settings for Android and iOS.
   static Future<void> _initializeLocalNotifications() async {
     const initializationSettings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -72,9 +70,7 @@ class NotificationService {
 
     await _localNotifications.initialize(
       initializationSettings,
-      onDidReceiveNotificationResponse: (response) {
-        print('Notification tapped: ${response.payload}');
-      },
+      onDidReceiveNotificationResponse: (_) {},
     );
 
     final androidPlugin = _localNotifications
@@ -83,23 +79,20 @@ class NotificationService {
     await androidPlugin?.createNotificationChannel(_androidChannel);
   }
 
+  // Gets the Firebase Cloud Messaging token for this device.
   static Future<void> _getFCMToken() async {
     try {
       fcmToken = await _messaging.getToken();
-      print('FCM Token: $fcmToken');
-
       _messaging.onTokenRefresh.listen((newToken) {
         fcmToken = newToken;
-        print('FCM Token refreshed: $newToken');
       });
-    } catch (e) {
-      print('Error getting FCM token: $e');
+    } catch (_) {
+      // Token may not be available on all platforms during development.
     }
   }
 
+  // Shows a local notification when a push message arrives in the foreground.
   static Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    print('Received foreground message: ${message.notification?.title}');
-
     await _showLocalNotification(
       title: message.notification?.title ?? 'New Notification',
       body: message.notification?.body ?? '',
@@ -107,16 +100,13 @@ class NotificationService {
     );
   }
 
-  static void _handleMessageOpenedApp(RemoteMessage message) {
-    print('Message opened from background: ${message.notification?.title}');
-  }
+  // Runs when the user opens the app from a notification.
+  static void _handleMessageOpenedApp(RemoteMessage message) {}
 
-  static void _handleInitialMessage(RemoteMessage? message) {
-    if (message != null) {
-      print('App opened from terminated state: ${message.notification?.title}');
-    }
-  }
+  // Runs when the app was opened from a terminated state via notification.
+  static void _handleInitialMessage(RemoteMessage? message) {}
 
+  // Displays a notification on the device.
   static Future<void> _showLocalNotification({
     required String title,
     required String body,
@@ -145,23 +135,5 @@ class NotificationService {
       notificationDetails,
       payload: payload,
     );
-  }
-
-  static Future<void> subscribeToTopic(String topic) async {
-    try {
-      await _messaging.subscribeToTopic(topic);
-      print('Subscribed to topic: $topic');
-    } catch (e) {
-      print('Error subscribing to topic: $e');
-    }
-  }
-
-  static Future<void> unsubscribeFromTopic(String topic) async {
-    try {
-      await _messaging.unsubscribeFromTopic(topic);
-      print('Unsubscribed from topic: $topic');
-    } catch (e) {
-      print('Error unsubscribing from topic: $e');
-    }
   }
 }

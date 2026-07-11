@@ -80,7 +80,7 @@ class AboutScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               const Text(
-                'HavaPaw is a smart pet tracking application designed to help you monitor your pet\'s health, activity, and location. Connect your smartwatch or manually enter data to keep track of your pet\'s wellness journey.',
+                'HavaPaw is a smart pet tracking application designed to help you monitor your pet\'s health, activity, and location. Enter collar data manually and set your pet\'s location to keep track of your pet\'s wellness journey.',
                 style: TextStyle(
                   fontSize: 14,
                   color: AppColors.textGrey,
@@ -112,9 +112,9 @@ class AboutScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _FeatureItem(
-                icon: Icons.bluetooth_rounded,
-                title: 'Smartwatch Integration',
-                description: 'Connect compatible smartwatches for automatic data sync',
+                icon: Icons.edit_note_rounded,
+                title: 'Manual Data Entry',
+                description: 'Enter collar health data manually from Settings',
               ),
               const SizedBox(height: 12),
               _FeatureItem(
