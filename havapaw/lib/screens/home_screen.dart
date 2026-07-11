@@ -13,6 +13,7 @@ import '../services/pet_service.dart';
 import '../services/selected_pet_service.dart';
 import '../services/watch_data_service.dart';
 import '../services/geofence_service.dart';
+import '../services/sound_service.dart';
 import '../models/pet.dart';
 import '../models/watch_data.dart';
 import '../models/geofence.dart';
@@ -37,6 +38,20 @@ class _HomeScreenState extends State<HomeScreen> {
     MapScreen(),
     ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (SoundService.isMusicEnabled) {
+      SoundService.playBackgroundMusic();
+    }
+  }
+
+  @override
+  void dispose() {
+    SoundService.stopBackgroundMusic();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

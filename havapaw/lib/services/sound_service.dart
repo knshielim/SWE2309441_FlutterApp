@@ -8,6 +8,7 @@ class SoundService {
   static bool _isMusicEnabled = true;
   static bool _isSfxEnabled = true;
   static int _currentTrackIndex = 0;
+  static double _volume = 0.5;
   
   static final List<String> _audioTracks = [
     'audio/music1.mp3',
@@ -28,10 +29,6 @@ class SoundService {
         _playNextTrack();
       }
     });
-    
-    if (_isMusicEnabled) {
-      await playBackgroundMusic();
-    }
   }
 
   static Future<void> _loadSettings() async {
@@ -39,6 +36,7 @@ class SoundService {
     _isMusicEnabled = prefs.getBool('music_enabled') ?? true;
     _isSfxEnabled = prefs.getBool('sfx_enabled') ?? true;
     _currentTrackIndex = prefs.getInt('current_track') ?? 0;
+    _volume = prefs.getDouble('music_volume') ?? 0.5;
   }
 
   static Future<void> _saveSettings() async {
@@ -46,11 +44,13 @@ class SoundService {
     await prefs.setBool('music_enabled', _isMusicEnabled);
     await prefs.setBool('sfx_enabled', _isSfxEnabled);
     await prefs.setInt('current_track', _currentTrackIndex);
+    await prefs.setDouble('music_volume', _volume);
   }
 
   static bool get isMusicEnabled => _isMusicEnabled;
   static bool get isSfxEnabled => _isSfxEnabled;
   static int get currentTrackIndex => _currentTrackIndex;
+  static double get volume => _volume;
 
   static Future<void> setMusicEnabled(bool enabled) async {
     _isMusicEnabled = enabled;
@@ -68,10 +68,17 @@ class SoundService {
     await _saveSettings();
   }
 
+  static Future<void> setVolume(double volume) async {
+    _volume = volume.clamp(0.0, 1.0);
+    await _saveSettings();
+    await _audioPlayer.setVolume(_volume);
+  }
+
   static Future<void> playBackgroundMusic() async {
     if (!_isMusicEnabled) return;
     
     try {
+      await _audioPlayer.setVolume(_volume);
       await _audioPlayer.setReleaseMode(ReleaseMode.loop);
       await _audioPlayer.play(AssetSource(_audioTracks[_currentTrackIndex]));
     } catch (e) {
