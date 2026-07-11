@@ -305,8 +305,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Preferences
-          _SectionHeader('preferences'.tr()),
+          // Data Management
+          _SectionHeader('data_management'.tr()),
           _SettingsTile(
             icon: Icons.location_on_rounded,
             label: 'set_pet_location'.tr(),
@@ -321,6 +321,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualWatchDataScreen()));
             },
           ),
+          const SizedBox(height: 20),
+
+          // Preferences
+          _SectionHeader('preferences'.tr()),
           _SettingsTile(
             icon: Icons.notifications_outlined,
             label: 'notification_settings'.tr(),
