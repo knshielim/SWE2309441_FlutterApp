@@ -23,18 +23,20 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
+// Clamp coordinates to valid world ranges.
+// Top-level so it can be used by any State class in this file
+// (e.g. both _MapScreenState and _GeofenceFormSheetState).
+LatLng _clampCoordinates(double lat, double lng) {
+  final clampedLat = lat.clamp(-85.0, 85.0);
+  final clampedLng = lng.clamp(-180.0, 180.0);
+  return LatLng(clampedLat, clampedLng);
+}
+
 class _MapScreenState extends State<MapScreen> {
   int _activePetIndex = 0;
   final MapController _mapController = MapController();
   Position? _currentPosition;
   bool _isLoadingLocation = false;
-
-  // Clamp coordinates to valid world ranges
-  LatLng _clampCoordinates(double lat, double lng) {
-    final clampedLat = lat.clamp(-85.0, 85.0);
-    final clampedLng = lng.clamp(-180.0, 180.0);
-    return LatLng(clampedLat, clampedLng);
-  }
 
   @override
   void initState() {
@@ -256,12 +258,14 @@ class _MapScreenState extends State<MapScreen> {
 
                   return Column(
                     children: [
-                      StreamBuilder<List<Geofence>>(
-                        stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
-                        builder: (context, geofenceSnapshot) {
-                          final geofences = geofenceSnapshot.data ?? [];
-                          return _buildInteractiveMap(pet, geofences);
-                        },
+                      Expanded(
+                        child: StreamBuilder<List<Geofence>>(
+                          stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
+                          builder: (context, geofenceSnapshot) {
+                            final geofences = geofenceSnapshot.data ?? [];
+                            return _buildInteractiveMap(pet, geofences);
+                          },
+                        ),
                       ),
                       const SizedBox(height: 16),
                       // Location info
@@ -590,7 +594,11 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
     if (widget.existingGeofences != null && widget.existingGeofences!.isNotEmpty) {
       _editingGeofence = widget.existingGeofences!.first;
       _nameCtrl.text = _editingGeofence!.name;
-      _selectedLocation = LatLng(_editingGeofence!.latitude, _editingGeofence!.longitude);
+      final geoLat = _editingGeofence!.latitude;
+      final geoLng = _editingGeofence!.longitude;
+      _selectedLocation = (geoLat.isFinite && geoLng.isFinite)
+          ? _clampCoordinates(geoLat, geoLng)
+          : const LatLng(3.1390, 101.6869); // Default: Kuala Lumpur
       _radius = _editingGeofence!.radius;
       _radiusCtrl.text = _radius.round().toString();
     } else {
@@ -718,9 +726,11 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                     Position position = await Geolocator.getCurrentPosition(
                       desiredAccuracy: LocationAccuracy.high,
                     );
-                    if (mounted) {
+                    final lat = position.latitude;
+                    final lng = position.longitude;
+                    if (mounted && lat.isFinite && lng.isFinite) {
                       setState(() {
-                        _selectedLocation = LatLng(position.latitude, position.longitude);
+                        _selectedLocation = _clampCoordinates(lat, lng);
                       });
                       _mapController.move(_selectedLocation!, 15);
                     }
