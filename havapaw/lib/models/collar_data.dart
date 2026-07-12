@@ -1,4 +1,5 @@
-class WatchData {
+// Data model for pet collar health and location readings
+class CollarData {
   final String? id;
   final String deviceId;
   final String deviceName;
@@ -13,7 +14,7 @@ class WatchData {
   final double? latitude;
   final double? longitude;
 
-  WatchData({
+  CollarData({
     this.id,
     required this.deviceId,
     required this.deviceName,
@@ -29,7 +30,7 @@ class WatchData {
     this.longitude,
   });
 
-  // Converts this reading to a map for Firebase storage.
+  // Converts this reading to a map for Firebase storage
   Map<String, dynamic> toMap() {
     return {
       'deviceId': deviceId,
@@ -47,9 +48,9 @@ class WatchData {
     };
   }
 
-  // Creates a WatchData object from Firebase document data.
-  factory WatchData.fromMap(Map<String, dynamic> map, String docId) {
-    return WatchData(
+  // Creates a CollarData object from Firebase document data
+  factory CollarData.fromMap(Map<String, dynamic> map, String docId) {
+    return CollarData(
       id: docId,
       deviceId: map['deviceId'] ?? '',
       deviceName: map['deviceName'] ?? 'Unknown Device',

@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
-import 'manual_watch_data_screen.dart';
+import 'manual_collar_data_screen.dart';
 import 'account_settings_screen.dart';
 import 'language_screen.dart';
 import 'privacy_policy_screen.dart';
@@ -318,7 +318,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.edit_note_rounded,
             label: 'manual_watch_data'.tr(),
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualWatchDataScreen()));
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualCollarDataScreen()));
             },
           ),
           const SizedBox(height: 20),

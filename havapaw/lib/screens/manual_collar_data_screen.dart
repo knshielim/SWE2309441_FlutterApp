@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
-import '../services/watch_data_service.dart';
-import '../models/watch_data.dart';
+import '../services/collar_data_service.dart';
+import '../models/collar_data.dart';
 import '../models/pet.dart';
 import '../services/pet_service.dart';
 
-class ManualWatchDataScreen extends StatefulWidget {
-  const ManualWatchDataScreen({super.key});
+class ManualCollarDataScreen extends StatefulWidget {
+  const ManualCollarDataScreen({super.key});
 
   @override
-  State<ManualWatchDataScreen> createState() => _ManualWatchDataScreenState();
+  State<ManualCollarDataScreen> createState() => _ManualCollarDataScreenState();
 }
 
-class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
+class _ManualCollarDataScreenState extends State<ManualCollarDataScreen> {
   final _formKey = GlobalKey<FormState>();
   final _stepsController = TextEditingController();
   final _heartRateController = TextEditingController();
@@ -39,6 +39,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
     super.dispose();
   }
 
+  // Load user's pets for selection
   Future<void> _loadPets() async {
     final snapshot = await PetService.getPetsStream().first;
     final pets = snapshot.docs
@@ -54,7 +55,8 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
     }
   }
 
-  Future<void> _saveWatchData() async {
+  // Save collar data to Firebase
+  Future<void> _saveCollarData() async {
     if (!_formKey.currentState!.validate()) return;
     
     setState(() => _isLoading = true);
@@ -63,7 +65,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
 
-      final watchData = WatchData(
+      final collarData = CollarData(
         deviceId: 'manual_entry',
         deviceName: 'Manual Entry',
         steps: int.tryParse(_stepsController.text),
@@ -75,11 +77,11 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
         petId: _selectedPetId,
       );
 
-      await WatchDataService.saveWatchData(watchData);
+      await CollarDataService.saveCollarData(collarData);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Watch data saved successfully!')),
+          const SnackBar(content: Text('Collar data saved successfully!')),
         );
         Navigator.pop(context);
       }
@@ -100,7 +102,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manual Watch Data Entry'),
+        title: const Text('Manual Collar Data Entry'),
         backgroundColor: AppColors.primaryTeal,
       ),
       body: SafeArea(
@@ -259,7 +261,7 @@ class _ManualWatchDataScreenState extends State<ManualWatchDataScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _saveWatchData,
+                    onPressed: _isLoading ? null : _saveCollarData,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryTeal,
                       padding: const EdgeInsets.symmetric(vertical: 16),

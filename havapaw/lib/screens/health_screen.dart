@@ -3,10 +3,10 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
-import '../services/watch_data_service.dart';
+import '../services/collar_data_service.dart';
 import '../services/pet_service.dart';
 import '../services/medication_service.dart';
-import '../models/watch_data.dart';
+import '../models/collar_data.dart';
 import '../models/pet.dart';
 import '../models/medication.dart';
 import 'settings_screen.dart';
@@ -183,16 +183,16 @@ class _HealthContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<WatchData?>(
-      stream: WatchDataService.getLatestWatchData(),
+    return StreamBuilder<CollarData?>(
+      stream: CollarDataService.getLatestCollarData(),
       builder: (context, snapshot) {
-        final watchData = snapshot.data;
+        final collarData = snapshot.data;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Overall health card
-            _OverallHealthCard(watchData: watchData),
+            _OverallHealthCard(collarData: collarData),
             const SizedBox(height: 16),
 
             // Vital signs
@@ -203,7 +203,7 @@ class _HealthContent extends StatelessWidget {
                 _VitalCard(
                   icon: Icons.favorite_rounded,
                   label: 'heart_rate'.tr(),
-                  value: watchData?.heartRate?.toString() ?? '--',
+                  value: collarData?.heartRate?.toString() ?? '--',
                   unit: 'bpm'.tr(),
                   color: AppColors.alertRed,
                 ),
@@ -211,7 +211,7 @@ class _HealthContent extends StatelessWidget {
                 _VitalCard(
                   icon: Icons.thermostat_rounded,
                   label: 'temperature'.tr(),
-                  value: watchData?.temperature?.toStringAsFixed(1) ?? '--',
+                  value: collarData?.temperature?.toStringAsFixed(1) ?? '--',
                   unit: 'celsius'.tr(),
                   color: AppColors.amber,
                 ),
@@ -219,7 +219,7 @@ class _HealthContent extends StatelessWidget {
                 _VitalCard(
                   icon: Icons.directions_run_rounded,
                   label: 'activity'.tr(),
-                  value: watchData?.steps?.toString() ?? '--',
+                  value: collarData?.steps?.toString() ?? '--',
                   unit: 'steps'.tr(),
                   color: AppColors.primaryTeal,
                 ),
@@ -369,14 +369,14 @@ class _HealthContent extends StatelessWidget {
 }
 
 class _OverallHealthCard extends StatelessWidget {
-  final WatchData? watchData;
+  final CollarData? collarData;
 
-  const _OverallHealthCard({required this.watchData});
+  const _OverallHealthCard({required this.collarData});
 
   @override
   Widget build(BuildContext context) {
-    final hasData = watchData != null;
-    final isNormal = _isHealthNormal(watchData);
+    final hasData = collarData != null;
+    final isNormal = _isHealthNormal(collarData);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -423,7 +423,7 @@ class _OverallHealthCard extends StatelessWidget {
   }
 
   // Returns true when heart rate and temperature are in a normal range.
-  bool _isHealthNormal(WatchData? data) {
+  bool _isHealthNormal(CollarData? data) {
     if (data == null) return false;
     // Simple health check logic
     if (data.heartRate != null && (data.heartRate! < 60 || data.heartRate! > 120)) return false;

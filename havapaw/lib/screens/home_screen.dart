@@ -10,12 +10,12 @@ import '../widgets/bottom_nav.dart';
 import '../theme/app_theme.dart';
 import '../services/pet_service.dart';
 import '../services/selected_pet_service.dart';
-import '../services/watch_data_service.dart';
+import '../services/collar_data_service.dart';
 import '../services/geofence_service.dart';
 import '../services/pet_location_service.dart';
 import '../services/sound_service.dart';
 import '../models/pet.dart';
-import '../models/watch_data.dart';
+import '../models/collar_data.dart';
 import '../models/geofence.dart';
 import '../utils/map_defaults.dart';
 import 'health_screen.dart';
@@ -147,8 +147,8 @@ class _HomeTabState extends State<_HomeTab> {
     }
   }
 
-  // Calculates a simple health score from watch data.
-  int _calculateHealthScore(WatchData data) {
+  // Calculates a simple health score from collar data.
+  int _calculateHealthScore(CollarData data) {
     int score = 100;
     
     // Deduct points based on heart rate
@@ -496,16 +496,16 @@ class _HomeTabState extends State<_HomeTab> {
             ),
             const SizedBox(height: 16),
 
-            // Health score and stats from smartwatch
-            StreamBuilder<WatchData?>(
-              stream: WatchDataService.getLatestWatchData(),
+            // Health score and stats from pet collar
+            StreamBuilder<CollarData?>(
+              stream: CollarDataService.getLatestCollarData(),
               builder: (context, snapshot) {
-                final watchData = snapshot.data;
+                final collarData = snapshot.data;
                 
-                // Calculate health score based on watch data
+                // Calculate health score based on collar data
                 int healthScore = 100;
-                if (watchData != null) {
-                  healthScore = _calculateHealthScore(watchData);
+                if (collarData != null) {
+                  healthScore = _calculateHealthScore(collarData);
                 }
                 
                 return Column(
@@ -545,8 +545,8 @@ class _HomeTabState extends State<_HomeTab> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Activity breakdown - only show if watch data is available
-                    if (watchData != null)
+                    // Activity breakdown - only show if collar data is available
+                    if (collarData != null)
                       _SectionCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,7 +561,7 @@ class _HomeTabState extends State<_HomeTab> {
                           ],
                         ),
                       ),
-                    if (watchData == null)
+                    if (collarData == null)
                       _SectionCard(
                         child: Padding(
                           padding: const EdgeInsets.all(20),
@@ -581,11 +581,11 @@ class _HomeTabState extends State<_HomeTab> {
                     // Stats row
                     Row(
                       children: [
-                        _StatCard(icon: Icons.directions_walk_rounded, label: 'steps'.tr(), value: watchData?.steps?.toString() ?? '--', unit: '/ 10,000', color: AppColors.primaryTeal),
+                        _StatCard(icon: Icons.directions_walk_rounded, label: 'steps'.tr(), value: collarData?.steps?.toString() ?? '--', unit: '/ 10,000', color: AppColors.primaryTeal),
                         const SizedBox(width: 12),
-                        _StatCard(icon: Icons.straighten_rounded, label: 'distance'.tr(), value: watchData?.distance?.toStringAsFixed(1) ?? '--', unit: 'km today', color: AppColors.darkTeal),
+                        _StatCard(icon: Icons.straighten_rounded, label: 'distance'.tr(), value: collarData?.distance?.toStringAsFixed(1) ?? '--', unit: 'km today', color: AppColors.darkTeal),
                         const SizedBox(width: 12),
-                        _StatCard(icon: Icons.local_fire_department_rounded, label: 'calories'.tr(), value: watchData?.calories?.toString() ?? '--', unit: 'kcal', color: AppColors.amber),
+                        _StatCard(icon: Icons.local_fire_department_rounded, label: 'calories'.tr(), value: collarData?.calories?.toString() ?? '--', unit: 'kcal', color: AppColors.amber),
                       ],
                     ),
                     const SizedBox(height: 20),
