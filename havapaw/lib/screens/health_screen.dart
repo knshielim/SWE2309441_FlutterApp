@@ -184,7 +184,7 @@ class _HealthContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<CollarData?>(
-      stream: CollarDataService.getLatestCollarData(),
+      stream: petId.isNotEmpty ? CollarDataService.getLatestCollarDataForPet(petId) : Stream.value(null),
       builder: (context, snapshot) {
         final collarData = snapshot.data;
 

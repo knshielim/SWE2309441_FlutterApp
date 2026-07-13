@@ -7,6 +7,26 @@ class CollarDataService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // Returns the most recent collar reading for a specific pet
+  static Stream<CollarData?> getLatestCollarDataForPet(String petId) {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value(null);
+
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('collarData')
+        .where('petId', isEqualTo: petId)
+        .orderBy('timestamp', descending: true)
+        .limit(1)
+        .snapshots()
+        .map((snapshot) {
+      if (snapshot.docs.isEmpty) return null;
+      final doc = snapshot.docs.first;
+      return CollarData.fromMap(doc.data(), doc.id);
+    });
+  }
+
   // Returns the most recent collar reading for the logged-in user
   static Stream<CollarData?> getLatestCollarData() {
     final uid = _auth.currentUser?.uid;
@@ -35,18 +55,6 @@ class CollarDataService {
       ...collarData.toMap(),
       'syncedAt': FieldValue.serverTimestamp(),
     });
-
-    if (collarData.petId != null && collarData.steps != null) {
-      await _db
-          .collection('users')
-          .doc(uid)
-          .collection('pets')
-          .doc(collarData.petId)
-          .update({
-        'lastSyncedAt': FieldValue.serverTimestamp(),
-        'steps': collarData.steps,
-      });
-    }
   }
 
   // Returns collar data for a specific pet

@@ -488,114 +488,107 @@ class _HomeTabState extends State<_HomeTab> {
                         },
                       ),
                     ),
+                    const SizedBox(height: 16),
+
+                    // Health score and stats from pet collar
+                    StreamBuilder<CollarData?>(
+                      stream: pet.id != null ? CollarDataService.getLatestCollarDataForPet(pet.id!) : Stream.value(null),
+                      builder: (context, snapshot) {
+                        final collarData = snapshot.data;
+                        
+                        // Calculate health score based on collar data
+                        int healthScore = 100;
+                        if (collarData != null) {
+                          healthScore = _calculateHealthScore(collarData);
+                        }
+                        
+                        return Column(
+                          children: [
+                            // Health score
+                            _SectionCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.favorite_rounded, color: AppColors.primaryTeal, size: 18),
+                                      const SizedBox(width: 6),
+                                      Text('health_score'.tr(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.slateDark)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: LinearProgressIndicator(
+                                            value: healthScore / 100,
+                                            backgroundColor: AppColors.divider,
+                                            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryTeal),
+                                            minHeight: 10,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text('$healthScore/100', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primaryTeal, fontSize: 16)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Activity breakdown - only show if collar data is available
+                            if (collarData != null)
+                              _SectionCard(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('activity_breakdown'.tr(), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark)),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        _StatCard(icon: Icons.directions_walk_rounded, label: 'steps'.tr(), value: collarData?.steps?.toString() ?? '--', unit: '/ 10,000', color: AppColors.primaryTeal),
+                                        const SizedBox(width: 12),
+                                        _StatCard(icon: Icons.straighten_rounded, label: 'distance'.tr(), value: collarData?.distance?.toStringAsFixed(1) ?? '--', unit: 'km today', color: AppColors.darkTeal),
+                                        const SizedBox(width: 12),
+                                        _StatCard(icon: Icons.local_fire_department_rounded, label: 'calories'.tr(), value: collarData?.calories?.toString() ?? '--', unit: 'kcal', color: AppColors.amber),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (collarData == null)
+                              _SectionCard(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Center(
+                                    child: Column(
+                                      children: [
+                                        Icon(Icons.watch_outlined, size: 40, color: AppColors.textGrey.withValues(alpha: 0.5)),
+                                        const SizedBox(height: 8),
+                                        Text('connect_smartwatch'.tr(), style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
                   ],
                 );
               },
             );
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Health score and stats from pet collar
-            StreamBuilder<CollarData?>(
-              stream: CollarDataService.getLatestCollarData(),
-              builder: (context, snapshot) {
-                final collarData = snapshot.data;
-                
-                // Calculate health score based on collar data
-                int healthScore = 100;
-                if (collarData != null) {
-                  healthScore = _calculateHealthScore(collarData);
-                }
-                
-                return Column(
-                  children: [
-                    // Health score
-                    _SectionCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.favorite_rounded, color: AppColors.primaryTeal, size: 18),
-                              const SizedBox(width: 6),
-                              Text('health_score'.tr(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.slateDark)),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: LinearProgressIndicator(
-                                    value: healthScore / 100,
-                                    backgroundColor: AppColors.divider,
-                                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryTeal),
-                                    minHeight: 10,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text('$healthScore/100', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primaryTeal, fontSize: 16)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Activity breakdown - only show if collar data is available
-                    if (collarData != null)
-                      _SectionCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('activity_breakdown'.tr(), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark)),
-                            const SizedBox(height: 12),
-                            _ActivityRow(icon: Icons.bedtime_rounded, label: 'sleep'.tr(), value: '8.5 hours', color: AppColors.darkTeal),
-                            const SizedBox(height: 8),
-                            _ActivityRow(icon: Icons.directions_walk_rounded, label: 'walk'.tr(), value: '2.3 hours', color: AppColors.primaryTeal),
-                            const SizedBox(height: 8),
-                            _ActivityRow(icon: Icons.pause_circle_rounded, label: 'idle'.tr(), value: '13.2 hours', color: AppColors.textGrey),
-                          ],
-                        ),
-                      ),
-                    if (collarData == null)
-                      _SectionCard(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Center(
-                            child: Column(
-                              children: [
-                                Icon(Icons.watch_outlined, size: 40, color: AppColors.textGrey.withValues(alpha: 0.5)),
-                                const SizedBox(height: 8),
-                                Text('connect_smartwatch'.tr(), style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-
-                    // Stats row
-                    Row(
-                      children: [
-                        _StatCard(icon: Icons.directions_walk_rounded, label: 'steps'.tr(), value: collarData?.steps?.toString() ?? '--', unit: '/ 10,000', color: AppColors.primaryTeal),
-                        const SizedBox(width: 12),
-                        _StatCard(icon: Icons.straighten_rounded, label: 'distance'.tr(), value: collarData?.distance?.toStringAsFixed(1) ?? '--', unit: 'km today', color: AppColors.darkTeal),
-                        const SizedBox(width: 12),
-                        _StatCard(icon: Icons.local_fire_department_rounded, label: 'calories'.tr(), value: collarData?.calories?.toString() ?? '--', unit: 'kcal', color: AppColors.amber),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                );
-              },
-            ),
+          },
           ],
         ),
       ),
+    );
+          },
+        );
     );
   }
 }
