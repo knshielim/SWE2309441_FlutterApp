@@ -494,6 +494,35 @@ class _HomeTabState extends State<_HomeTab> {
                     StreamBuilder<CollarData?>(
                       stream: pet.id != null ? CollarDataService.getLatestCollarDataForPet(pet.id!) : Stream.value(null),
                       builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          // Surfaces Firestore errors (e.g. a missing composite
+                          // index) instead of silently rendering as "no data".
+                          debugPrint('CollarData stream error: ${snapshot.error}');
+                          return _SectionCard(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Center(
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.error_outline_rounded, size: 40, color: AppColors.alertRed.withValues(alpha: 0.5)),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Error loading activity data',
+                                      style: TextStyle(fontSize: 13, color: AppColors.textGrey),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '${snapshot.error}',
+                                      style: const TextStyle(fontSize: 11, color: AppColors.alertRed),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
                         final collarData = snapshot.data;
                         
                         // Calculate health score based on collar data

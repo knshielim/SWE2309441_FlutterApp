@@ -186,6 +186,35 @@ class _HealthContent extends StatelessWidget {
     return StreamBuilder<CollarData?>(
       stream: petId.isNotEmpty ? CollarDataService.getLatestCollarDataForPet(petId) : Stream.value(null),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          // Surfaces Firestore errors (e.g. a missing composite index) instead
+          // of silently rendering as "no data".
+          debugPrint('CollarData stream error: ${snapshot.error}');
+          return _InfoCard(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.error_outline_rounded, size: 40, color: AppColors.alertRed.withValues(alpha: 0.5)),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Error loading collar data',
+                      style: TextStyle(fontSize: 14, color: AppColors.textGrey),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${snapshot.error}',
+                      style: const TextStyle(fontSize: 12, color: AppColors.alertRed),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
         final collarData = snapshot.data;
 
         return Column(

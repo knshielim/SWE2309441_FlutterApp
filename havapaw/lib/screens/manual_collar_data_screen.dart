@@ -5,6 +5,7 @@ import '../services/collar_data_service.dart';
 import '../models/collar_data.dart';
 import '../models/pet.dart';
 import '../services/pet_service.dart';
+import '../services/selected_pet_service.dart';
 
 class ManualCollarDataScreen extends StatefulWidget {
   const ManualCollarDataScreen({super.key});
@@ -49,7 +50,12 @@ class _ManualCollarDataScreenState extends State<ManualCollarDataScreen> {
       setState(() {
         _pets = pets;
         if (pets.isNotEmpty) {
-          _selectedPetId = pets.first.id;
+          // Default to whichever pet is currently active on the home screen,
+          // not just the first pet, so manual entries land on the pet the
+          // user is actually viewing.
+          final petIds = pets.map((pet) => pet.id!).toList();
+          final activeIndex = SelectedPetService.activeIndex(petIds);
+          _selectedPetId = pets[activeIndex].id;
         }
       });
     }
