@@ -4,78 +4,59 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/geofence.dart';
 
-// Manages safe zones (geofences) for pets.
+// Handles adding, reading, updating, and deleting geofences.
 class GeofenceService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Returns active geofences for one pet.
-  static Stream<List<Geofence>> getGeofencesForPet(String petId) {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value([]);
+  static String get _uid => _auth.currentUser!.uid;
 
-    return _db
-        .collection('users')
-        .doc(uid)
-        .collection('geofences')
+  static CollectionReference get _geofencesRef =>
+      _db.collection('users').doc(_uid).collection('geofences');
+
+  // Adds a new geofence to Firebase.
+  static Future<void> addGeofence(Geofence geofence) async {
+    await _geofencesRef.add({
+      ...geofence.toMap(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Returns geofences for one pet.
+  static Stream<QuerySnapshot> getGeofencesForPetStream(String petId) {
+    return _geofencesRef
         .where('petId', isEqualTo: petId)
         .where('isActive', isEqualTo: true)
         .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => Geofence.fromMap(doc.data(), doc.id))
-            .toList());
+        .snapshots();
   }
 
-  // Saves a new geofence to Firebase.
-  static Future<void> addGeofence(Geofence geofence) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('geofences')
-        .add(geofence.toMap());
+  // Returns a list of geofences for one pet (convenience method).
+  static Stream<List<Geofence>> getGeofencesForPet(String petId) {
+    return getGeofencesForPetStream(petId).map((snapshot) => snapshot.docs
+        .map((doc) => Geofence.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .toList());
   }
 
-  // Updates an existing geofence in Firebase.
-  static Future<void> updateGeofence(Geofence geofence) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null || geofence.id == null) return;
-
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('geofences')
-        .doc(geofence.id)
-        .update(geofence.toMap());
+  // Updates an existing geofence.
+  static Future<void> updateGeofence(
+    String geofenceId,
+    Map<String, dynamic> data,
+  ) async {
+    await _geofencesRef.doc(geofenceId).update({
+      ...data,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // Deletes a geofence from Firebase.
   static Future<void> deleteGeofence(String geofenceId) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('geofences')
-        .doc(geofenceId)
-        .delete();
+    await _geofencesRef.doc(geofenceId).delete();
   }
 
   // Turns a geofence on or off.
   static Future<void> toggleGeofenceStatus(String geofenceId, bool isActive) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('geofences')
-        .doc(geofenceId)
-        .update({'isActive': isActive});
+    await _geofencesRef.doc(geofenceId).update({'isActive': isActive});
   }
 
   // Checks if the pet is inside the geofence radius.

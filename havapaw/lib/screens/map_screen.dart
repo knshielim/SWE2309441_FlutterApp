@@ -119,7 +119,7 @@ class _MapScreenState extends State<MapScreen> {
         existingGeofences: geofences,
         onSave: (geofence) async {
           if (geofence.id != null && geofence.id!.isNotEmpty) {
-            await GeofenceService.updateGeofence(geofence);
+            await GeofenceService.updateGeofence(geofence.id!, geofence.toMap());
           } else {
             await GeofenceService.addGeofence(geofence);
           }
