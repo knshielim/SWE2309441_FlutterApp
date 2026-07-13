@@ -56,6 +56,8 @@
   "disconnect": "断开连接",
   "current_location": "当前位置",
   "safe_zone": "安全区域",
+  "pet_outside_zone": "宠物在区域外",
+  "pet_outside_zone_desc": "您的宠物已离开安全区域",
   "map_preview": "地图预览",
   "connect_gps_collar": "连接 GPS 项圈以追踪",
   "health_score": "健康评分",

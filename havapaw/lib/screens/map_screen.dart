@@ -193,44 +193,62 @@ class _MapScreenState extends State<MapScreen> {
                     final geofences = geofenceSnapshot.data ?? [];
                     final hasActiveGeofence = geofences.isNotEmpty;
                     
-                    return Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: hasActiveGeofence ? AppColors.lightTeal : AppColors.cardWhite,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: hasActiveGeofence ? AppColors.primaryTeal.withValues(alpha: 0.3) : AppColors.divider),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.shield_rounded, color: hasActiveGeofence ? AppColors.primaryTeal : AppColors.textGrey, size: 22),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  hasActiveGeofence ? 'safe_zone_active'.tr() : 'no_safe_zone'.tr(),
-                                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark),
-                                ),
-                                Text(
-                                  hasActiveGeofence ? 'pet_within_zone'.tr() : 'configure_safe_zone'.tr(),
-                                  style: TextStyle(fontSize: 12, color: hasActiveGeofence ? AppColors.primaryTeal : AppColors.textGrey),
-                                ),
-                              ],
-                            ),
+                    return StreamBuilder<LatLng?>(
+                      stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
+                      builder: (context, petLocationSnapshot) {
+                        final petLocation = petLocationSnapshot.data;
+                        final hasPetLocation = petLocation != null &&
+                            petLocation.latitude.isFinite &&
+                            petLocation.longitude.isFinite;
+                        
+                        // Check if pet is outside geofence
+                        bool isOutside = false;
+                        if (geofences.isNotEmpty && hasPetLocation) {
+                          isOutside = !GeofenceService.isPetWithinGeofence(petLocation, geofences.first);
+                        }
+                        
+                        final isWithinSafeZone = hasActiveGeofence && !isOutside;
+                    
+                        return Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: isWithinSafeZone ? AppColors.lightTeal : AppColors.cardWhite,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: isWithinSafeZone ? AppColors.primaryTeal.withValues(alpha: 0.3) : AppColors.divider),
                           ),
-                          if (hasActiveGeofence)
-                            IconButton(
-                              onPressed: () => _showGeofenceForm(petId: pet.id ?? '', geofences: geofences),
-                              icon: const Icon(Icons.edit_rounded, color: AppColors.primaryTeal, size: 22),
-                            )
-                          else
-                            IconButton(
-                              onPressed: () => _showGeofenceForm(petId: pet.id ?? ''),
-                              icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primaryTeal, size: 22),
-                            ),
-                        ],
-                      ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.shield_rounded, color: isWithinSafeZone ? AppColors.primaryTeal : AppColors.textGrey, size: 22),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isWithinSafeZone ? 'safe_zone_active'.tr() : (hasActiveGeofence ? 'pet_outside_zone'.tr() : 'no_safe_zone'.tr()),
+                                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark),
+                                    ),
+                                    Text(
+                                      isWithinSafeZone ? 'pet_within_zone'.tr() : (hasActiveGeofence ? 'pet_outside_zone_desc'.tr() : 'configure_safe_zone'.tr()),
+                                      style: TextStyle(fontSize: 12, color: isWithinSafeZone ? AppColors.primaryTeal : (hasActiveGeofence ? AppColors.alertRed : AppColors.textGrey)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (hasActiveGeofence)
+                                IconButton(
+                                  onPressed: () => _showGeofenceForm(petId: pet.id ?? '', geofences: geofences),
+                                  icon: const Icon(Icons.edit_rounded, color: AppColors.primaryTeal, size: 22),
+                                )
+                              else
+                                IconButton(
+                                  onPressed: () => _showGeofenceForm(petId: pet.id ?? ''),
+                                  icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primaryTeal, size: 22),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
                     );
                   },
                 );

@@ -56,6 +56,8 @@
   "disconnect": "Disconnect",
   "current_location": "Current Location",
   "safe_zone": "Safe Zone",
+  "pet_outside_zone": "Pet Outside Zone",
+  "pet_outside_zone_desc": "Your pet has left the safe zone",
   "map_preview": "Map Preview",
   "connect_gps_collar": "Connect GPS collar to track",
   "health_score": "Health Score",

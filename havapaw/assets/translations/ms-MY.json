@@ -56,6 +56,8 @@
   "disconnect": "Putus Sambungan",
   "current_location": "Lokasi Semasa",
   "safe_zone": "Zon Selamat",
+  "pet_outside_zone": "Haiwan Di Luar Zon",
+  "pet_outside_zone_desc": "Haiwan anda telah meninggalkan zon selamat",
   "map_preview": "Pratonton Peta",
   "connect_gps_collar": "Sambungkan kolar GPS untuk menjejak",
   "health_score": "Skor Kesihatan",
