@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import '../models/collar_data.dart';
 
 // Service for managing pet collar health and location data
@@ -12,6 +13,8 @@ class CollarDataService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value(null);
 
+    debugPrint('getLatestCollarDataForPet: Querying for petId=$petId, uid=$uid');
+
     return _db
         .collection('users')
         .doc(uid)
@@ -19,11 +22,18 @@ class CollarDataService {
         .where('petId', isEqualTo: petId)
         .orderBy('timestamp', descending: true)
         .limit(1)
-        .snapshots()
+        .snapshots(includeMetadataChanges: true)
         .map((snapshot) {
+      debugPrint('getLatestCollarDataForPet: Snapshot has ${snapshot.docs.length} docs, fromCache=${snapshot.metadata.isFromCache}');
       if (snapshot.docs.isEmpty) return null;
       final doc = snapshot.docs.first;
-      return CollarData.fromMap(doc.data(), doc.id);
+      final data = CollarData.fromMap(doc.data(), doc.id);
+      debugPrint('getLatestCollarDataForPet: Returning data with petId=${data.petId}, fromCache=${snapshot.metadata.isFromCache}');
+      // Only return data if it's from server or if it matches the expected petId
+      if (!snapshot.metadata.isFromCache || data.petId == petId) {
+        return data;
+      }
+      return null;
     });
   }
 
@@ -51,10 +61,13 @@ class CollarDataService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    await _db.collection('users').doc(uid).collection('collarData').add({
+    final dataToSave = {
       ...collarData.toMap(),
       'syncedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    debugPrint('Saving to Firestore: $dataToSave');
+
+    await _db.collection('users').doc(uid).collection('collarData').add(dataToSave);
   }
 
   // Returns collar data for a specific pet

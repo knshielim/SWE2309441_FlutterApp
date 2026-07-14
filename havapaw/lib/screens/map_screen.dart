@@ -10,6 +10,8 @@ import '../theme/app_theme.dart';
 import '../services/pet_service.dart';
 import '../services/geofence_service.dart';
 import '../services/pet_location_service.dart';
+import '../services/selected_pet_service.dart';
+import '../services/walk_state_service.dart';
 import '../models/pet.dart';
 import '../models/geofence.dart';
 import '../utils/map_defaults.dart';
@@ -31,7 +33,6 @@ LatLng _clampCoordinates(double lat, double lng) {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  int _activePetIndex = 0;
   final MapController _mapController = MapController();
   Position? _currentPosition;
   bool _isLoadingLocation = false;
@@ -134,7 +135,7 @@ class _MapScreenState extends State<MapScreen> {
     final user = FirebaseAuth.instance.currentUser;
     final fullName = user?.displayName ?? 'there';
     final firstName = fullName.split(' ')[0];
-    
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -175,78 +176,103 @@ class _MapScreenState extends State<MapScreen> {
             const SizedBox(height: 20),
 
             // Safe zone toggle
-            StreamBuilder<QuerySnapshot>(
-              stream: PetService.getPetsStream(),
-              builder: (context, petSnapshot) {
-                if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                final pets = petSnapshot.data!.docs
-                    .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-                    .toList();
-                if (_activePetIndex >= pets.length) _activePetIndex = 0;
-                final pet = pets[_activePetIndex];
-                
-                return StreamBuilder<List<Geofence>>(
-                  stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
-                  builder: (context, geofenceSnapshot) {
-                    final geofences = geofenceSnapshot.data ?? [];
-                    final hasActiveGeofence = geofences.isNotEmpty;
-                    
-                    return StreamBuilder<LatLng?>(
-                      stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
-                      builder: (context, petLocationSnapshot) {
-                        final petLocation = petLocationSnapshot.data;
-                        final hasPetLocation = petLocation != null &&
-                            petLocation.latitude.isFinite &&
-                            petLocation.longitude.isFinite;
-                        
-                        // Check if pet is outside geofence
-                        bool isOutside = false;
-                        if (geofences.isNotEmpty && hasPetLocation) {
-                          isOutside = !GeofenceService.isPetWithinGeofence(petLocation, geofences.first);
-                        }
-                        
-                        final isWithinSafeZone = hasActiveGeofence && !isOutside;
-                    
-                        return Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: isWithinSafeZone ? AppColors.lightTeal : AppColors.cardWhite,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: isWithinSafeZone ? AppColors.primaryTeal.withValues(alpha: 0.3) : AppColors.divider),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.shield_rounded, color: isWithinSafeZone ? AppColors.primaryTeal : AppColors.textGrey, size: 22),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      isWithinSafeZone ? 'safe_zone_active'.tr() : (hasActiveGeofence ? 'pet_outside_zone'.tr() : 'no_safe_zone'.tr()),
-                                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark),
+            ValueListenableBuilder<int>(
+              valueListenable: SelectedPetService.notifier,
+              builder: (context, _, child) {
+                return StreamBuilder<QuerySnapshot>(
+                  stream: PetService.getPetsStream(),
+                  builder: (context, petSnapshot) {
+                    if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final pets = petSnapshot.data!.docs
+                        .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+                        .toList();
+                    final petIds = pets.map((pet) => pet.id!).toList();
+                    SelectedPetService.ensureValidSelection(petIds);
+                    final activePetIndex = SelectedPetService.activeIndex(petIds);
+                    final pet = pets[activePetIndex];
+
+                    return StreamBuilder<List<Geofence>>(
+                      stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
+                      builder: (context, geofenceSnapshot) {
+                        final geofences = geofenceSnapshot.data ?? [];
+                        final hasActiveGeofence = geofences.isNotEmpty;
+
+                        return StreamBuilder<LatLng?>(
+                          stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
+                          builder: (context, petLocationSnapshot) {
+                            final petLocation = petLocationSnapshot.data;
+                            final hasPetLocation = petLocation != null &&
+                                petLocation.latitude.isFinite &&
+                                petLocation.longitude.isFinite;
+
+                            // Check if pet is outside geofence
+                            bool isOutside = false;
+                            if (geofences.isNotEmpty && hasPetLocation) {
+                              isOutside = !GeofenceService.isPetWithinGeofence(petLocation, geofences.first);
+                            }
+
+                            final isWithinSafeZone = hasActiveGeofence && !isOutside;
+
+                            return ValueListenableBuilder<bool>(
+                              valueListenable: WalkStateService.notifier,
+                              builder: (context, isOnWalk, child) {
+                                final showOnWalk = isOnWalk && hasActiveGeofence && isOutside;
+
+                                return GestureDetector(
+                                  onTap: () {
+                                    if (hasActiveGeofence && isOutside) {
+                                      WalkStateService.toggleWalkState();
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: showOnWalk ? Colors.amber.withValues(alpha: 0.1) : (isWithinSafeZone ? AppColors.lightTeal : AppColors.cardWhite),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(color: showOnWalk ? Colors.amber : (isWithinSafeZone ? AppColors.primaryTeal.withValues(alpha: 0.3) : AppColors.divider)),
                                     ),
-                                    Text(
-                                      isWithinSafeZone ? 'pet_within_zone'.tr() : (hasActiveGeofence ? 'pet_outside_zone_desc'.tr() : 'configure_safe_zone'.tr()),
-                                      style: TextStyle(fontSize: 12, color: isWithinSafeZone ? AppColors.primaryTeal : (hasActiveGeofence ? AppColors.alertRed : AppColors.textGrey)),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          showOnWalk ? Icons.directions_walk_rounded : Icons.shield_rounded,
+                                          color: showOnWalk ? Colors.amber : (isWithinSafeZone ? AppColors.primaryTeal : AppColors.textGrey),
+                                          size: 22,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                showOnWalk ? 'on_walk'.tr() : (isWithinSafeZone ? 'safe_zone_active'.tr() : (hasActiveGeofence ? 'pet_outside_zone'.tr() : 'no_safe_zone'.tr())),
+                                                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark),
+                                              ),
+                                              Text(
+                                                showOnWalk ? 'pet_on_walk_desc'.tr() : (isWithinSafeZone ? 'pet_within_zone'.tr() : (hasActiveGeofence ? 'pet_outside_zone_desc'.tr() : 'configure_safe_zone'.tr())),
+                                                style: TextStyle(fontSize: 12, color: showOnWalk ? Colors.amber : (isWithinSafeZone ? AppColors.primaryTeal : (hasActiveGeofence ? AppColors.alertRed : AppColors.textGrey))),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (hasActiveGeofence)
+                                          IconButton(
+                                            onPressed: () => _showGeofenceForm(petId: pet.id ?? '', geofences: geofences),
+                                            icon: const Icon(Icons.edit_rounded, color: AppColors.primaryTeal, size: 22),
+                                          )
+                                        else
+                                          IconButton(
+                                            onPressed: () => _showGeofenceForm(petId: pet.id ?? ''),
+                                            icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primaryTeal, size: 22),
+                                          ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                              if (hasActiveGeofence)
-                                IconButton(
-                                  onPressed: () => _showGeofenceForm(petId: pet.id ?? '', geofences: geofences),
-                                  icon: const Icon(Icons.edit_rounded, color: AppColors.primaryTeal, size: 22),
-                                )
-                              else
-                                IconButton(
-                                  onPressed: () => _showGeofenceForm(petId: pet.id ?? ''),
-                                  icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primaryTeal, size: 22),
-                                ),
-                            ],
-                          ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         );
                       },
                     );
@@ -258,59 +284,64 @@ class _MapScreenState extends State<MapScreen> {
 
             // Map
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: PetService.getPetsStream(),
-                builder: (context, petSnapshot) {
-                  if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
-                    return _buildPlaceholderMap();
-                  }
-                  final pets = petSnapshot.data!.docs
-                      .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-                      .toList();
-                  if (_activePetIndex >= pets.length) _activePetIndex = 0;
-                  final pet = pets[_activePetIndex];
+              child: ValueListenableBuilder<int>(
+                valueListenable: SelectedPetService.notifier,
+                builder: (context, _, child) {
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: PetService.getPetsStream(),
+                    builder: (context, petSnapshot) {
+                      if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
+                        return _buildPlaceholderMap();
+                      }
+                      final pets = petSnapshot.data!.docs
+                          .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+                          .toList();
+                      final petIds = pets.map((pet) => pet.id!).toList();
+                      SelectedPetService.ensureValidSelection(petIds);
+                      final activePetIndex = SelectedPetService.activeIndex(petIds);
+                      final pet = pets[activePetIndex];
 
-                  return StreamBuilder<LatLng?>(
-                    stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
-                    builder: (context, petLocationSnapshot) {
-                      final petLocation = petLocationSnapshot.data;
-                      final hasUserLocation = _currentPosition != null &&
-                          _currentPosition!.latitude.isFinite &&
-                          _currentPosition!.longitude.isFinite;
-                      final hasPetLocation = petLocation != null &&
-                          petLocation.latitude.isFinite &&
-                          petLocation.longitude.isFinite;
+                      return StreamBuilder<LatLng?>(
+                        stream: pet.id != null ? PetLocationService.getPetLocation(pet.id!) : Stream.value(null),
+                        builder: (context, petLocationSnapshot) {
+                          final petLocation = petLocationSnapshot.data;
+                          final hasUserLocation = _currentPosition != null &&
+                              _currentPosition!.latitude.isFinite &&
+                              _currentPosition!.longitude.isFinite;
+                          final hasPetLocation = petLocation != null &&
+                              petLocation.latitude.isFinite &&
+                              petLocation.longitude.isFinite;
 
-                      return Column(
-                        children: [
-                          Expanded(
-                            child: StreamBuilder<List<Geofence>>(
-                              stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
-                              builder: (context, geofenceSnapshot) {
-                                final geofences = geofenceSnapshot.data ?? [];
-                                return _buildInteractiveMap(pet, geofences, petLocation);
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          if (!hasUserLocation && !hasPetLocation)
-                            _MapLocationHint(
-                              onSetPetLocation: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => const PetLocationScreen()),
-                                );
-                              },
-                            )
-                          else
-                            _LocationCard(
-                              icon: Icons.location_history_rounded,
-                              label: 'last_known'.tr(),
-                              value: hasPetLocation
-                                  ? '${petLocation.latitude.toStringAsFixed(4)}, ${petLocation.longitude.toStringAsFixed(4)}'
-                                  : 'not_set'.tr(),
-                            ),
-                        ],
+                          return Column(
+                            children: [
+                              Expanded(
+                                child: StreamBuilder<List<Geofence>>(
+                                  stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
+                                  builder: (context, geofenceSnapshot) {
+                                    final geofences = geofenceSnapshot.data ?? [];
+                                    return _buildInteractiveMap(pet, geofences, petLocation);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              if (!hasUserLocation && !hasPetLocation)
+                                _MapLocationHint(
+                                  onSetPetLocation: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const PetLocationScreen()),
+                                    );
+                                  },
+                                )
+                              else
+                                _LocationCard(
+                                  icon: Icons.location_history_rounded,
+                                  label: 'last_known'.tr(),
+                                  petLocation: petLocation,
+                                ),
+                            ],
+                          );
+                        },
                       );
                     },
                   );
@@ -370,11 +401,15 @@ class _MapScreenState extends State<MapScreen> {
     LatLng mapCenter = kDefaultMapCenter;
     double mapZoom = kDefaultMapZoom;
 
-    if (hasUserLocation) {
-      mapCenter = _clampCoordinates(_currentPosition!.latitude, _currentPosition!.longitude);
-      mapZoom = kFocusedMapZoom;
-    } else if (hasPetLocation) {
+    if (hasPetLocation) {
       mapCenter = petLocation;
+      mapZoom = kFocusedMapZoom;
+      // Move map to pet location
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _mapController.move(petLocation, kFocusedMapZoom);
+      });
+    } else if (hasUserLocation) {
+      mapCenter = _clampCoordinates(_currentPosition!.latitude, _currentPosition!.longitude);
       mapZoom = kFocusedMapZoom;
     } else if (geofences.isNotEmpty) {
       final geofence = geofences.first;
@@ -596,12 +631,52 @@ class _MapLocationHint extends StatelessWidget {
   }
 }
 
-class _LocationCard extends StatelessWidget {
+class _LocationCard extends StatefulWidget {
   final IconData icon;
   final String label;
-  final String value;
+  final LatLng? petLocation;
 
-  const _LocationCard({required this.icon, required this.label, required this.value});
+  const _LocationCard({required this.icon, required this.label, required this.petLocation});
+
+  @override
+  State<_LocationCard> createState() => _LocationCardState();
+}
+
+class _LocationCardState extends State<_LocationCard> {
+  String _address = 'Loading...';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAddress();
+  }
+
+  Future<void> _loadAddress() async {
+    if (widget.petLocation == null) {
+      setState(() => _address = 'not_set'.tr());
+      return;
+    }
+
+    try {
+      final locations = await placemarkFromCoordinates(
+        widget.petLocation!.latitude,
+        widget.petLocation!.longitude,
+      );
+      if (locations.isNotEmpty && mounted) {
+        final place = locations.first;
+        final addressParts = [
+          place.street,
+          place.locality,
+          place.administrativeArea,
+        ].where((part) => part != null && part.isNotEmpty).join(', ');
+        setState(() => _address = addressParts.isNotEmpty ? addressParts : 'Unknown location');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _address = 'Unknown location');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -614,14 +689,16 @@ class _LocationCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.primaryTeal, size: 20),
+          Icon(widget.icon, color: AppColors.primaryTeal, size: 20),
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-              Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.slateDark)),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.label, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                Text(_address, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.slateDark)),
+              ],
+            ),
           ),
         ],
       ),
@@ -659,7 +736,7 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
     super.initState();
     _nameCtrl = TextEditingController(text: 'Home');
     _radiusCtrl = TextEditingController(text: '100');
-    
+
     // Load first existing geofence if available
     if (widget.existingGeofences != null && widget.existingGeofences!.isNotEmpty) {
       _editingGeofence = widget.existingGeofences!.first;
@@ -684,7 +761,7 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _selectedLocation == null) return;
     setState(() => _isLoading = true);
-    
+
     final geofence = Geofence(
       id: _editingGeofence?.id,
       petId: widget.petId,
@@ -695,14 +772,14 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
       isActive: true,
       createdAt: _editingGeofence?.createdAt ?? DateTime.now(),
     );
-    
+
     await widget.onSave(geofence);
     setState(() => _isLoading = false);
   }
 
   Future<void> _delete() async {
     if (_editingGeofence?.id == null) return;
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -720,7 +797,7 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
         ],
       ),
     );
-    
+
     if (confirmed == true && mounted) {
       await GeofenceService.deleteGeofence(_editingGeofence!.id!);
       if (mounted) Navigator.pop(context);
@@ -729,7 +806,7 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
 
   Future<void> _searchLocation(String query) async {
     if (query.trim().isEmpty) return;
-    
+
     try {
       final locations = await locationFromAddress(query);
       if (locations.isNotEmpty && mounted) {
@@ -780,7 +857,7 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
             style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
           ),
           const SizedBox(height: 12),
-          
+
           // Location search bar
           TextField(
             decoration: InputDecoration(
@@ -816,7 +893,7 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
             onSubmitted: _searchLocation,
           ),
           const SizedBox(height: 12),
-          
+
           // Map for location selection
           SizedBox(
             height: 250,
@@ -929,9 +1006,9 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
               ],
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Form fields
           Expanded(
             child: SingleChildScrollView(
@@ -955,7 +1032,7 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                       },
                     ),
                     const SizedBox(height: 20),
-                    
+
                     Text(
                       'radius_meters'.tr(),
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slateDark),
@@ -1009,7 +1086,7 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    
+
                     Row(
                       children: [
                         if (_editingGeofence != null)

@@ -14,6 +14,7 @@ import '../services/collar_data_service.dart';
 import '../services/geofence_service.dart';
 import '../services/pet_location_service.dart';
 import '../services/sound_service.dart';
+import '../services/walk_state_service.dart';
 import '../models/pet.dart';
 import '../models/collar_data.dart';
 import '../models/geofence.dart';
@@ -81,45 +82,13 @@ class _HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<_HomeTab> {
   final _user = FirebaseAuth.instance.currentUser;
+  final MapController _mapController = MapController();
   Position? _currentPosition;
-  bool _isOnWalk = false;
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
-  }
-
-  // Shows a warning when the pet leaves the safe zone.
-  void _showGeofenceAlertDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_rounded, color: AppColors.alertRed),
-            const SizedBox(width: 8),
-            Text('pet_outside_zone_alert'.tr()),
-          ],
-        ),
-        content: Text('pet_outside_zone_desc'.tr()),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() => _isOnWalk = true);
-            },
-            child: Text('on_walk'.tr()),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: Text('dismiss'.tr()),
-          ),
-        ],
-      ),
-    );
   }
 
   // Gets the user's current GPS location for the map preview.
@@ -308,11 +277,15 @@ class _HomeTabState extends State<_HomeTab> {
 
                               LatLng mapCenter = kDefaultMapCenter;
                               double mapZoom = kDefaultMapZoom;
-                              if (hasUserLocation) {
-                                mapCenter = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
-                                mapZoom = 14;
-                              } else if (hasPetLocation) {
+                              if (hasPetLocation) {
                                 mapCenter = petLocation;
+                                mapZoom = 14;
+                                // Move map to pet location
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  _mapController.move(petLocation, 14);
+                                });
+                              } else if (hasUserLocation) {
+                                mapCenter = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
                                 mapZoom = 14;
                               } else if (geofences.isNotEmpty) {
                                 final geofence = geofences.first;
@@ -321,81 +294,88 @@ class _HomeTabState extends State<_HomeTab> {
                                   mapZoom = 14;
                                 }
                               }
-                              
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+                              return ValueListenableBuilder<bool>(
+                                valueListenable: WalkStateService.notifier,
+                                builder: (context, isOnWalk, child) {
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Icon(Icons.location_on_rounded, color: (isOutside && !_isOnWalk) ? AppColors.alertRed : AppColors.primaryTeal, size: 18),
-                                          const SizedBox(width: 6),
-                                          Text('current_location'.tr(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.slateDark)),
-                                        ],
-                                      ),
-                                      if (geofences.isEmpty)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.lightTeal,
-                                            borderRadius: BorderRadius.circular(20),
-                                          ),
-                                          child: Text('no_safe_zone'.tr(), style: const TextStyle(color: AppColors.primaryTeal, fontSize: 11, fontWeight: FontWeight.w600)),
-                                        )
-                                      else if (isOutside && !_isOnWalk)
-                                        GestureDetector(
-                                          onTap: () => _showGeofenceAlertDialog(),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.alertRed.withValues(alpha: 0.15),
-                                              borderRadius: BorderRadius.circular(20),
-                                              border: Border.all(color: AppColors.alertRed),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Icon(Icons.warning_rounded, color: AppColors.alertRed, size: 12),
-                                                const SizedBox(width: 4),
-                                                Text('pet_outside_zone'.tr(), style: const TextStyle(color: AppColors.alertRed, fontSize: 11, fontWeight: FontWeight.w600)),
-                                              ],
-                                            ),
-                                          ),
-                                        )
-                                      else if (_isOnWalk)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.amber.withValues(alpha: 0.15),
-                                            borderRadius: BorderRadius.circular(20),
-                                            border: Border.all(color: Colors.amber),
-                                          ),
-                                          child: Row(
+                                          Row(
                                             children: [
-                                              const Icon(Icons.directions_walk_rounded, color: Colors.amber, size: 12),
-                                              const SizedBox(width: 4),
-                                              Text('on_walk'.tr(), style: const TextStyle(color: Colors.amber, fontSize: 11, fontWeight: FontWeight.w600)),
+                                              Icon(Icons.location_on_rounded, color: (isOutside && !isOnWalk) ? AppColors.alertRed : AppColors.primaryTeal, size: 18),
+                                              const SizedBox(width: 6),
+                                              Text('current_location'.tr(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.slateDark)),
                                             ],
                                           ),
-                                        )
-                                      else
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.lightTeal,
-                                            borderRadius: BorderRadius.circular(20),
-                                          ),
-                                          child: Text('safe_zone'.tr(), style: const TextStyle(color: AppColors.primaryTeal, fontSize: 11, fontWeight: FontWeight.w600)),
-                                        ),
-                                    ],
-                                  ),
+                                          if (geofences.isEmpty)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.lightTeal,
+                                                borderRadius: BorderRadius.circular(20),
+                                              ),
+                                              child: Text('no_safe_zone'.tr(), style: const TextStyle(color: AppColors.primaryTeal, fontSize: 11, fontWeight: FontWeight.w600)),
+                                            )
+                                          else if (isOutside && !isOnWalk)
+                                            GestureDetector(
+                                              onTap: () => WalkStateService.toggleWalkState(),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.alertRed.withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                  border: Border.all(color: AppColors.alertRed),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.warning_rounded, color: AppColors.alertRed, size: 12),
+                                                    const SizedBox(width: 4),
+                                                    Text('pet_outside_zone'.tr(), style: const TextStyle(color: AppColors.alertRed, fontSize: 11, fontWeight: FontWeight.w600)),
+                                                  ],
+                                                ),
+                                              ),
+                                            )
+                                          else if (isOnWalk)
+                                            GestureDetector(
+                                              onTap: () => WalkStateService.toggleWalkState(),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.amber.withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                  border: Border.all(color: Colors.amber),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.directions_walk_rounded, color: Colors.amber, size: 12),
+                                                    const SizedBox(width: 4),
+                                                    Text('on_walk'.tr(), style: const TextStyle(color: Colors.amber, fontSize: 11, fontWeight: FontWeight.w600)),
+                                                  ],
+                                                ),
+                                              ),
+                                            )
+                                          else
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.lightTeal,
+                                                borderRadius: BorderRadius.circular(20),
+                                              ),
+                                              child: Text('safe_zone'.tr(), style: const TextStyle(color: AppColors.primaryTeal, fontSize: 11, fontWeight: FontWeight.w600)),
+                                            ),
+                                        ],
+                                      ),
                                   const SizedBox(height: 12),
                                   SizedBox(
                                     height: 150,
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(12),
                                       child: FlutterMap(
+                                        mapController: _mapController,
                                         options: MapOptions(
                                           initialCenter: mapCenter,
                                           initialZoom: mapZoom,
@@ -420,8 +400,8 @@ class _HomeTabState extends State<_HomeTab> {
                                                 return CircleMarker(
                                                   point: LatLng(lat, lng),
                                                   radius: g.radius,
-                                                  color: isOutside && !_isOnWalk ? AppColors.alertRed.withValues(alpha: 0.2) : AppColors.primaryTeal.withValues(alpha: 0.2),
-                                                  borderColor: isOutside && !_isOnWalk ? AppColors.alertRed : AppColors.primaryTeal,
+                                                  color: isOutside && !isOnWalk ? AppColors.alertRed.withValues(alpha: 0.2) : AppColors.primaryTeal.withValues(alpha: 0.2),
+                                                  borderColor: isOutside && !isOnWalk ? AppColors.alertRed : AppColors.primaryTeal,
                                                   borderStrokeWidth: 2,
                                                 );
                                               }).whereType<CircleMarker>().toList(),
@@ -458,12 +438,12 @@ class _HomeTabState extends State<_HomeTab> {
                                                 height: 30,
                                                 child: Container(
                                                   decoration: BoxDecoration(
-                                                    color: isOutside && !_isOnWalk ? AppColors.alertRed.withValues(alpha: 0.3) : AppColors.primaryTeal.withValues(alpha: 0.3),
+                                                    color: isOutside && !isOnWalk ? AppColors.alertRed.withValues(alpha: 0.3) : AppColors.primaryTeal.withValues(alpha: 0.3),
                                                     shape: BoxShape.circle,
                                                   ),
                                                   child: Icon(
                                                     Icons.pets_rounded,
-                                                    color: isOutside && !_isOnWalk ? AppColors.alertRed : AppColors.primaryTeal,
+                                                    color: isOutside && !isOnWalk ? AppColors.alertRed : AppColors.primaryTeal,
                                                     size: 16,
                                                   ),
                                                 ),
@@ -482,6 +462,8 @@ class _HomeTabState extends State<_HomeTab> {
                                     ),
                                   ],
                                 ],
+                              );
+                                },
                               );
                             },
                           );

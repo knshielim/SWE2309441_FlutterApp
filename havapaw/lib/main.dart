@@ -6,11 +6,13 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
+import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/notification_service.dart';
 import 'services/selected_pet_service.dart';
 import 'services/sound_service.dart';
+import 'services/walk_state_service.dart';
 
 // Starts the app and loads Firebase, language, and saved settings.
 void main() async {
@@ -21,6 +23,7 @@ void main() async {
 
   await NotificationService.initialize();
   await SelectedPetService.loadSelectedPetId();
+  await WalkStateService.loadWalkState();
   await SoundService.init();
 
   final prefs = await SharedPreferences.getInstance();
@@ -64,22 +67,40 @@ class HavaPawApp extends StatelessWidget {
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
       locale: context.locale,
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(color: Color(0xFF0F9B8E)),
-              ),
-            );
-          }
-          if (snapshot.hasData) {
-            return const HomeScreen();
-          }
-          return const LoginScreen();
-        },
-      ),
+      initialRoute: '/splash',
+      routes: {
+        '/splash': (context) => const SplashScreen(),
+        '/login': (context) => const AuthWrapper(),
+        '/home': (context) => const HomeScreen(),
+      },
+    );
+  }
+}
+
+// Wrapper to handle auth state after splash screen
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF0F9B8E)),
+            ),
+          );
+        }
+        if (snapshot.hasData) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.of(context).pushReplacementNamed('/home');
+          });
+          return const SizedBox.shrink();
+        }
+        return const LoginScreen();
+      },
     );
   }
 }

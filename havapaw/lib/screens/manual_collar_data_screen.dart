@@ -61,30 +61,50 @@ class _ManualCollarDataScreenState extends State<ManualCollarDataScreen> {
     }
   }
 
+  // Calculate calories from steps and distance
+  int _calculateCalories(int? steps, double? distance) {
+    int calories = 0;
+    // Rough estimate: ~0.04 calories per step for dogs
+    if (steps != null && steps > 0) {
+      calories += (steps * 0.04).round();
+    }
+    // Additional estimate: ~30-40 calories per km walked
+    if (distance != null && distance > 0) {
+      calories += (distance * 35).round();
+    }
+    return calories;
+  }
+
   // Save collar data to Firebase
   Future<void> _saveCollarData() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     setState(() => _isLoading = true);
-    
+
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
 
+      final steps = int.tryParse(_stepsController.text);
+      final distance = double.tryParse(_distanceController.text);
+
+      debugPrint('Saving collar data for petId: $_selectedPetId');
+      debugPrint('Available pets: ${_pets.map((p) => '${p.name} (${p.id})').join(', ')}');
+
       final collarData = CollarData(
         deviceId: 'manual_entry',
         deviceName: 'Manual Entry',
-        steps: int.tryParse(_stepsController.text),
+        steps: steps,
         heartRate: int.tryParse(_heartRateController.text),
-        distance: double.tryParse(_distanceController.text),
-        calories: null, // Calculated automatically from steps/distance
+        distance: distance,
+        calories: _calculateCalories(steps, distance),
         temperature: double.tryParse(_temperatureController.text),
         timestamp: DateTime.now(),
         petId: _selectedPetId,
       );
 
       await CollarDataService.saveCollarData(collarData);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Collar data saved successfully!')),
@@ -92,6 +112,7 @@ class _ManualCollarDataScreenState extends State<ManualCollarDataScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
+      debugPrint('Error saving collar data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error saving data: $e')),

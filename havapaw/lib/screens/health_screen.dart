@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../services/collar_data_service.dart';
 import '../services/pet_service.dart';
 import '../services/medication_service.dart';
+import '../services/selected_pet_service.dart';
 import '../models/collar_data.dart';
 import '../models/pet.dart';
 import '../models/medication.dart';
@@ -19,7 +20,6 @@ class HealthScreen extends StatefulWidget {
 }
 
 class _HealthScreenState extends State<HealthScreen> {
-  int _activePetIndex = 0;
 
   // Opens the form to add or edit a medication.
   void _showMedicationForm({Medication? medication, required String petId}) {
@@ -124,38 +124,45 @@ class _HealthScreenState extends State<HealthScreen> {
             ),
             const SizedBox(height: 20),
             // Header with pet name
-            StreamBuilder<QuerySnapshot>(
-              stream: PetService.getPetsStream(),
-              builder: (context, petSnapshot) {
-                if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('no_pets_added'.tr(), style: const TextStyle(fontSize: 14, color: AppColors.textGrey)),
-                      const SizedBox(height: 20),
-                      _EmptyStateCard(),
-                    ],
-                  );
-                }
-                final pets = petSnapshot.data!.docs
-                    .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-                    .toList();
-                if (_activePetIndex >= pets.length) _activePetIndex = 0;
-                final pet = pets[_activePetIndex];
-                final petId = pet.id ?? '';
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${pet.name} · ${pet.type}', style: const TextStyle(fontSize: 14, color: AppColors.textGrey)),
-                    const SizedBox(height: 20),
-                    _HealthContent(
-                      petId: petId,
-                      pet: pet,
-                      onShowMedicationForm: () => _showMedicationForm(petId: petId),
-                      onEditMedication: (medication) => _showMedicationForm(medication: medication, petId: petId),
-                      onConfirmDeleteMedication: (medicationId) => _confirmDeleteMedication(medicationId),
-                    ),
-                  ],
+            ValueListenableBuilder<int>(
+              valueListenable: SelectedPetService.notifier,
+              builder: (context, _, child) {
+                return StreamBuilder<QuerySnapshot>(
+                  stream: PetService.getPetsStream(),
+                  builder: (context, petSnapshot) {
+                    if (!petSnapshot.hasData || petSnapshot.data!.docs.isEmpty) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('no_pets_added'.tr(), style: const TextStyle(fontSize: 14, color: AppColors.textGrey)),
+                          const SizedBox(height: 20),
+                          _EmptyStateCard(),
+                        ],
+                      );
+                    }
+                    final pets = petSnapshot.data!.docs
+                        .map((doc) => Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+                        .toList();
+                    final petIds = pets.map((pet) => pet.id!).toList();
+                    SelectedPetService.ensureValidSelection(petIds);
+                    final activePetIndex = SelectedPetService.activeIndex(petIds);
+                    final pet = pets[activePetIndex];
+                    final petId = pet.id ?? '';
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${pet.name} · ${pet.type}', style: const TextStyle(fontSize: 14, color: AppColors.textGrey)),
+                        const SizedBox(height: 20),
+                        _HealthContent(
+                          petId: petId,
+                          pet: pet,
+                          onShowMedicationForm: () => _showMedicationForm(petId: petId),
+                          onEditMedication: (medication) => _showMedicationForm(medication: medication, petId: petId),
+                          onConfirmDeleteMedication: (medicationId) => _confirmDeleteMedication(medicationId),
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             ),
@@ -183,9 +190,11 @@ class _HealthContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('_HealthContent build: petId=$petId');
     return StreamBuilder<CollarData?>(
       stream: petId.isNotEmpty ? CollarDataService.getLatestCollarDataForPet(petId) : Stream.value(null),
       builder: (context, snapshot) {
+        debugPrint('_HealthContent StreamBuilder: hasData=${snapshot.hasData}, data=${snapshot.data?.petId}');
         if (snapshot.hasError) {
           // Surfaces Firestore errors (e.g. a missing composite index) instead
           // of silently rendering as "no data".
