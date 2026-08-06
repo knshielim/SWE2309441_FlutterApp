@@ -13,6 +13,12 @@ class CollarData {
   final String? petId;
   final double? latitude;
   final double? longitude;
+  // Accelerometer data for Activity Index calculation
+  final double? accelerometerX;
+  final double? accelerometerY;
+  final double? accelerometerZ;
+  // Blood oxygen (optional, from MAX30102)
+  final double? bloodOxygen;
 
   CollarData({
     this.id,
@@ -28,6 +34,10 @@ class CollarData {
     this.petId,
     this.latitude,
     this.longitude,
+    this.accelerometerX,
+    this.accelerometerY,
+    this.accelerometerZ,
+    this.bloodOxygen,
   });
 
   // Converts this reading to a map for Firebase storage
@@ -45,6 +55,10 @@ class CollarData {
       'petId': petId,
       'latitude': latitude,
       'longitude': longitude,
+      'accelerometerX': accelerometerX,
+      'accelerometerY': accelerometerY,
+      'accelerometerZ': accelerometerZ,
+      'bloodOxygen': bloodOxygen,
     };
   }
 
@@ -64,6 +78,10 @@ class CollarData {
       petId: map['petId'],
       latitude: map['latitude']?.toDouble(),
       longitude: map['longitude']?.toDouble(),
+      accelerometerX: map['accelerometerX']?.toDouble(),
+      accelerometerY: map['accelerometerY']?.toDouble(),
+      accelerometerZ: map['accelerometerZ']?.toDouble(),
+      bloodOxygen: map['bloodOxygen']?.toDouble(),
     );
   }
 }

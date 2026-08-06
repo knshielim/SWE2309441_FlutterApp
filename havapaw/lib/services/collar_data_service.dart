@@ -8,12 +8,10 @@ class CollarDataService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Returns the most recent collar reading for a specific pet
+  // Returns the most recent collar reading for a specific pet from actual device only
   static Stream<CollarData?> getLatestCollarDataForPet(String petId) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value(null);
-
-    debugPrint('getLatestCollarDataForPet: Querying for petId=$petId, uid=$uid');
 
     return _db
         .collection('users')
@@ -21,19 +19,18 @@ class CollarDataService {
         .collection('collarData')
         .where('petId', isEqualTo: petId)
         .orderBy('timestamp', descending: true)
-        .limit(1)
+        .limit(50)
         .snapshots(includeMetadataChanges: true)
         .map((snapshot) {
-      debugPrint('getLatestCollarDataForPet: Snapshot has ${snapshot.docs.length} docs, fromCache=${snapshot.metadata.isFromCache}');
       if (snapshot.docs.isEmpty) return null;
-      final doc = snapshot.docs.first;
-      final data = CollarData.fromMap(doc.data(), doc.id);
-      debugPrint('getLatestCollarDataForPet: Returning data with petId=${data.petId}, fromCache=${snapshot.metadata.isFromCache}');
-      // Only return data if it's from server or if it matches the expected petId
-      if (!snapshot.metadata.isFromCache || data.petId == petId) {
-        return data;
-      }
-      return null;
+      // Filter for ESP32 device data only
+      final esp32Data = snapshot.docs
+          .map((doc) => CollarData.fromMap(doc.data(), doc.id))
+          .where((data) => data.deviceId.contains('ESP32'))
+          .toList();
+      
+      if (esp32Data.isEmpty) return null;
+      return esp32Data.first;
     });
   }
 
@@ -70,7 +67,7 @@ class CollarDataService {
     await _db.collection('users').doc(uid).collection('collarData').add(dataToSave);
   }
 
-  // Returns collar data for a specific pet
+  // Returns collar data for a specific pet from actual device only
   static Stream<List<CollarData>> getCollarDataForPet(String petId) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value([]);
@@ -85,6 +82,7 @@ class CollarDataService {
         .map((snapshot) {
       return snapshot.docs
           .map((doc) => CollarData.fromMap(doc.data(), doc.id))
+          .where((data) => data.deviceId.contains('ESP32'))
           .toList();
     });
   }

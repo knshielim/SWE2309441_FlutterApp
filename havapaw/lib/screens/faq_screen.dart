@@ -38,12 +38,12 @@ class FAQScreen extends StatelessWidget {
               answer: 'Yes! You can add and manage multiple pets. Use the navigation arrows in the pet card to switch between your pets.',
             ),
             _FAQItem(
-              question: 'How do I add collar health data?',
-              answer: 'Go to Settings → Manual Data Entry. Enter steps, heart rate, distance, and temperature, then save. The data will be stored in Firebase and shown on the Home and Health screens.',
+              question: 'How do I connect my pet\'s collar?',
+              answer: 'Go to the Connect Collar screen from the Health or Home page. Scan for available ESP32 devices and select your collar. Health and location data will sync automatically.',
             ),
             _FAQItem(
-              question: 'How do I set my pet\'s location?',
-              answer: 'Go to Settings → Set Pet Location. Pick a spot on the map or use your current location, then save. You can also set a safe zone from the Map tab.',
+              question: 'How do I track my pet\'s location?',
+              answer: 'Connect your ESP32 smart collar to track your pet\'s location in real-time. The collar sends GPS data automatically which is displayed on the Map screen.',
             ),
             _FAQItem(
               question: 'How is my data stored?',

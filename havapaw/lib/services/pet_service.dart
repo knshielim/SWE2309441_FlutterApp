@@ -37,4 +37,11 @@ class PetService {
   static Future<void> deletePet(String petId) async {
     await _petsRef.doc(petId).delete();
   }
+
+  // Gets a single pet by ID
+  static Future<Pet?> getPetById(String petId) async {
+    final doc = await _petsRef.doc(petId).get();
+    if (!doc.exists) return null;
+    return Pet.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+  }
 }

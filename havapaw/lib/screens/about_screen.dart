@@ -112,9 +112,9 @@ class AboutScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _FeatureItem(
-                icon: Icons.edit_note_rounded,
-                title: 'Manual Data Entry',
-                description: 'Enter collar health data manually from Settings',
+                icon: Icons.bluetooth_rounded,
+                title: 'Collar Connection',
+                description: 'Connect ESP32 smart collar for real-time data',
               ),
               const SizedBox(height: 12),
               _FeatureItem(

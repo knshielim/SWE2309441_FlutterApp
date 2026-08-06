@@ -7,10 +7,15 @@ import '../services/collar_data_service.dart';
 import '../services/pet_service.dart';
 import '../services/medication_service.dart';
 import '../services/selected_pet_service.dart';
+import '../services/health_intelligence_service.dart';
+import '../services/emergency_mode_service.dart';
 import '../models/collar_data.dart';
 import '../models/pet.dart';
 import '../models/medication.dart';
 import 'settings_screen.dart';
+import 'health_trends_screen.dart';
+import 'ai_insights_screen.dart';
+import 'collar_connection_screen.dart';
 
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key});
@@ -190,11 +195,9 @@ class _HealthContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('_HealthContent build: petId=$petId');
     return StreamBuilder<CollarData?>(
       stream: petId.isNotEmpty ? CollarDataService.getLatestCollarDataForPet(petId) : Stream.value(null),
       builder: (context, snapshot) {
-        debugPrint('_HealthContent StreamBuilder: hasData=${snapshot.hasData}, data=${snapshot.data?.petId}');
         if (snapshot.hasError) {
           // Surfaces Firestore errors (e.g. a missing composite index) instead
           // of silently rendering as "no data".
@@ -225,13 +228,52 @@ class _HealthContent extends StatelessWidget {
         }
 
         final collarData = snapshot.data;
+        final hasCollarData = collarData != null;
+        final hasCollarId = pet.collarId.isNotEmpty;
+
+        // Show connect collar prompt if no collar is connected or no data
+        if (!hasCollarId || !hasCollarData) {
+          return _ConnectCollarPrompt(
+            hasCollarId: hasCollarId,
+            petName: pet.name,
+          );
+        }
+
+        // Calculate health status and alerts
+        final healthStatus = HealthIntelligenceService.analyzeHealthStatus(collarData, pet);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Overall health card
-            _OverallHealthCard(collarData: collarData),
+            // Overall health card with status
+            _OverallHealthCard(collarData: collarData, healthStatus: healthStatus),
             const SizedBox(height: 16),
+
+            // Health alerts section
+            if (collarData != null)
+              StreamBuilder<List<CollarData>>(
+                stream: petId.isNotEmpty ? CollarDataService.getCollarDataForPet(petId) : Stream.value([]),
+                builder: (context, historicalSnapshot) {
+                  final historicalData = historicalSnapshot.data ?? [];
+                  final alerts = HealthIntelligenceService.generateHealthAlerts(
+                    collarData,
+                    pet,
+                    historicalData,
+                  );
+
+                  if (alerts.isEmpty) return const SizedBox.shrink();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Health Alerts', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.slateDark)),
+                      const SizedBox(height: 10),
+                      ...alerts.map((alert) => _HealthAlertCard(alert: alert)),
+                      const SizedBox(height: 16),
+                    ],
+                  );
+                },
+              ),
 
             // Vital signs
             Text('vital_signs'.tr(), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.slateDark)),
@@ -263,6 +305,259 @@ class _HealthContent extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+
+            // View health trends button
+            if (petId.isNotEmpty)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => HealthTrendsScreen(petId: petId),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.show_chart_rounded, size: 20),
+                  label: Text('view_health_trends'.tr()),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryTeal,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
+
+            // AI insights button
+            if (petId.isNotEmpty)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AIInsightsScreen(petId: petId),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 20),
+                  label: Text('view_ai_insights'.tr()),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.darkTeal,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+
+            // Emergency Mode section
+            if (petId.isNotEmpty)
+              StreamBuilder<Map<String, dynamic>>(
+                stream: EmergencyModeService.getEmergencyStatus(petId),
+                builder: (context, emergencySnapshot) {
+                  final emergencyStatus = emergencySnapshot.data ?? {};
+                  final isEmergencyMode = emergencyStatus['emergencyMode'] ?? false;
+                  final isSharingLocation = emergencyStatus['sharingLiveLocation'] ?? false;
+
+                  return Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: isEmergencyMode
+                          ? const LinearGradient(
+                              colors: [AppColors.alertRed, Color(0xFFDC2626)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            )
+                          : null,
+                      color: isEmergencyMode ? null : AppColors.cardWhite,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isEmergencyMode ? AppColors.alertRed : AppColors.divider,
+                        width: isEmergencyMode ? 2 : 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isEmergencyMode
+                              ? AppColors.alertRed.withValues(alpha: 0.2)
+                              : Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: isEmergencyMode
+                                        ? Colors.white.withValues(alpha: 0.2)
+                                        : AppColors.alertRed.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    Icons.emergency_rounded,
+                                    color: isEmergencyMode ? Colors.white : AppColors.alertRed,
+                                    size: 22,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'emergency_mode'.tr(),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: isEmergencyMode ? Colors.white : AppColors.slateDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (isEmergencyMode)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'active'.tr(),
+                                      style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  if (isEmergencyMode) {
+                                    await EmergencyModeService.deactivateEmergencyMode(petId);
+                                  } else {
+                                    await EmergencyModeService.activateEmergencyMode(
+                                      petId: petId,
+                                      level: EmergencyLevel.warning,
+                                      currentData: collarData,
+                                    );
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isEmergencyMode ? Colors.white : AppColors.alertRed,
+                                  foregroundColor: isEmergencyMode ? AppColors.alertRed : Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(isEmergencyMode ? Icons.check_circle_rounded : Icons.emergency_rounded, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      isEmergencyMode ? 'deactivate'.tr() : 'activate'.tr(),
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  if (isSharingLocation) {
+                                    await EmergencyModeService.stopSharingLiveLocation(petId);
+                                  } else {
+                                    await EmergencyModeService.shareLiveLocation(petId);
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isEmergencyMode
+                                      ? Colors.white.withValues(alpha: 0.2)
+                                      : AppColors.primaryTeal,
+                                  foregroundColor: isEmergencyMode ? Colors.white : Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(isSharingLocation ? Icons.location_disabled_rounded : Icons.share_location_rounded, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      isSharingLocation ? 'stop_sharing'.tr() : 'share_location'.tr(),
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (isEmergencyMode) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_rounded, size: 16, color: Colors.white.withValues(alpha: 0.9)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'emergency_active_desc'.tr(),
+                                    style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.9)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
             const SizedBox(height: 16),
 
             // Weight card
@@ -408,33 +703,53 @@ class _HealthContent extends StatelessWidget {
 
 class _OverallHealthCard extends StatelessWidget {
   final CollarData? collarData;
+  final HealthStatus healthStatus;
 
-  const _OverallHealthCard({required this.collarData});
+  const _OverallHealthCard({required this.collarData, required this.healthStatus});
 
   @override
   Widget build(BuildContext context) {
     final hasData = collarData != null;
-    final isNormal = _isHealthNormal(collarData);
+    final isNormal = healthStatus == HealthStatus.normal;
+    final isCritical = healthStatus == HealthStatus.critical;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.lightTeal,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primaryTeal.withValues(alpha: 0.3)),
-      ),
+    Color statusColor;
+    IconData statusIcon;
+    String statusText;
+
+    switch (healthStatus) {
+      case HealthStatus.normal:
+        statusColor = AppColors.primaryTeal;
+        statusIcon = Icons.favorite_rounded;
+        statusText = 'all_vitals_normal'.tr();
+        break;
+      case HealthStatus.warning:
+        statusColor = AppColors.amber;
+        statusIcon = Icons.warning_rounded;
+        statusText = 'health_warning'.tr();
+        break;
+      case HealthStatus.critical:
+        statusColor = AppColors.alertRed;
+        statusIcon = Icons.error_rounded;
+        statusText = 'health_critical'.tr();
+        break;
+    }
+
+    return _InfoCard(
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isNormal ? AppColors.primaryTeal : AppColors.amber,
+              color: isCritical
+                  ? AppColors.alertRed.withValues(alpha: 0.15)
+                  : (isNormal ? AppColors.lightTeal : AppColors.amber.withValues(alpha: 0.15)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              isNormal ? Icons.favorite_rounded : Icons.warning_rounded,
-              color: Colors.white,
-              size: 22,
+              statusIcon,
+              color: statusColor,
+              size: 24,
             ),
           ),
           const SizedBox(width: 14),
@@ -444,29 +759,99 @@ class _OverallHealthCard extends StatelessWidget {
               children: [
                 Text('overall_health'.tr(), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.slateDark)),
                 Text(
-                  hasData ? (isNormal ? 'all_vitals_normal'.tr() : 'check_vitals'.tr()) : 'no_data_available'.tr(),
-                  style: TextStyle(fontSize: 13, color: isNormal ? AppColors.primaryTeal : AppColors.amber),
+                  hasData ? statusText : 'no_data_available'.tr(),
+                  style: TextStyle(fontSize: 13, color: statusColor),
                 ),
               ],
             ),
           ),
           Icon(
-            isNormal ? Icons.trending_up_rounded : Icons.trending_flat_rounded,
-            color: isNormal ? AppColors.primaryTeal : AppColors.amber,
+            isNormal ? Icons.trending_up_rounded : (isCritical ? Icons.trending_down_rounded : Icons.trending_flat_rounded),
+            color: statusColor,
             size: 24,
           ),
         ],
       ),
     );
   }
+}
 
-  // Returns true when heart rate and temperature are in a normal range.
-  bool _isHealthNormal(CollarData? data) {
-    if (data == null) return false;
-    // Simple health check logic
-    if (data.heartRate != null && (data.heartRate! < 60 || data.heartRate! > 120)) return false;
-    if (data.temperature != null && (data.temperature! < 36.0 || data.temperature! > 40.0)) return false;
-    return true;
+class _HealthAlertCard extends StatelessWidget {
+  final HealthAlert alert;
+
+  const _HealthAlertCard({required this.alert});
+
+  @override
+  Widget build(BuildContext context) {
+    Color alertColor;
+    IconData alertIcon;
+
+    switch (alert.type) {
+      case HealthAlertType.highHeartRate:
+        alertColor = AppColors.alertRed;
+        alertIcon = Icons.favorite_rounded;
+        break;
+      case HealthAlertType.stressWarning:
+        alertColor = Colors.orange;
+        alertIcon = Icons.psychology_rounded;
+        break;
+      case HealthAlertType.lowActivity:
+        alertColor = AppColors.amber;
+        alertIcon = Icons.directions_walk_rounded;
+        break;
+      case HealthAlertType.highTemperature:
+        alertColor = AppColors.alertRed;
+        alertIcon = Icons.thermostat_rounded;
+        break;
+      case HealthAlertType.dehydrationRisk:
+        alertColor = Colors.blue;
+        alertIcon = Icons.water_drop_rounded;
+        break;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: alertColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: alertColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: alertColor.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(alertIcon, color: alertColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  alert.message,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: alertColor,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  alert.recommendation,
+                  style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -873,5 +1258,107 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     if (picked != null && mounted) {
       setState(() => _endDate = picked);
     }
+  }
+}
+
+class _ConnectCollarPrompt extends StatelessWidget {
+  final bool hasCollarId;
+  final String petName;
+
+  const _ConnectCollarPrompt({
+    required this.hasCollarId,
+    required this.petName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primaryTeal, AppColors.darkTeal],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryTeal.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.bluetooth_rounded, size: 48, color: Colors.white),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            hasCollarId ? 'waiting_for_collar_data'.tr() : 'connect_collar_title'.tr(),
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            hasCollarId
+                ? 'waiting_for_collar_data_desc'.tr(namedArgs: {'petName': petName})
+                : 'connect_collar_health_desc'.tr(namedArgs: {'petName': petName}),
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          if (!hasCollarId)
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const CollarConnectionScreen()));
+              },
+              icon: const Icon(Icons.bluetooth_rounded, size: 18),
+              label: Text('connect_collar'.tr()),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.primaryTeal,
+                minimumSize: const Size(double.infinity, 45),
+              ),
+            ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_rounded, size: 20, color: Colors.white.withValues(alpha: 0.9)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'collar_data_note'.tr(),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

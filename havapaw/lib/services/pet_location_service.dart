@@ -7,7 +7,7 @@ class PetLocationService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Returns the latest location for one pet.
+  // Returns the latest location for one pet from collar data only
   static Stream<LatLng?> getPetLocation(String petId) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value(null);
@@ -15,38 +15,32 @@ class PetLocationService {
     return _db
         .collection('users')
         .doc(uid)
-        .collection('pets')
-        .doc(petId)
+        .collection('collarData')
+        .where('petId', isEqualTo: petId)
+        .orderBy('timestamp', descending: true)
+        .limit(50)
         .snapshots()
         .map((snapshot) {
-      if (!snapshot.exists) return null;
-      final data = snapshot.data();
-      if (data == null) return null;
-      final lat = data['latitude'] as double?;
-      final lng = data['longitude'] as double?;
-      if (lat == null || lng == null) return null;
+      if (snapshot.docs.isEmpty) return null;
+      // Filter for entries with valid GPS coordinates
+      final locationData = snapshot.docs
+          .map((doc) => doc.data())
+          .where((data) {
+            final lat = data['latitude'] as double?;
+            final lng = data['longitude'] as double?;
+            return lat != null && lng != null && lat.isFinite && lng.isFinite;
+          })
+          .toList();
+      
+      if (locationData.isEmpty) return null;
+      final data = locationData.first;
+      final lat = data['latitude'] as double;
+      final lng = data['longitude'] as double;
       return LatLng(lat, lng);
     });
   }
 
-  // Saves a new location for one pet.
-  static Future<void> updatePetLocation(String petId, LatLng location) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('pets')
-        .doc(petId)
-        .update({
-      'latitude': location.latitude,
-      'longitude': location.longitude,
-      'locationUpdatedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  // Returns when the pet location was last updated.
+  // Returns when the pet location was last updated from collar data
   static Stream<DateTime?> getLocationTimestamp(String petId) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value(null);
@@ -54,14 +48,26 @@ class PetLocationService {
     return _db
         .collection('users')
         .doc(uid)
-        .collection('pets')
-        .doc(petId)
+        .collection('collarData')
+        .where('petId', isEqualTo: petId)
+        .orderBy('timestamp', descending: true)
+        .limit(50)
         .snapshots()
         .map((snapshot) {
-      if (!snapshot.exists) return null;
-      final data = snapshot.data();
-      if (data == null) return null;
-      final timestamp = data['locationUpdatedAt'] as Timestamp?;
+      if (snapshot.docs.isEmpty) return null;
+      // Filter for entries with valid GPS coordinates
+      final locationData = snapshot.docs
+          .map((doc) => doc.data())
+          .where((data) {
+            final lat = data['latitude'] as double?;
+            final lng = data['longitude'] as double?;
+            return lat != null && lng != null && lat.isFinite && lng.isFinite;
+          })
+          .toList();
+      
+      if (locationData.isEmpty) return null;
+      final data = locationData.first;
+      final timestamp = data['timestamp'] as Timestamp?;
       if (timestamp == null) return null;
       return timestamp.toDate();
     });

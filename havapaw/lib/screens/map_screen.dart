@@ -16,7 +16,7 @@ import '../models/pet.dart';
 import '../models/geofence.dart';
 import '../utils/map_defaults.dart';
 import 'settings_screen.dart';
-import 'pet_location_screen.dart';
+import 'collar_connection_screen.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -329,7 +329,7 @@ class _MapScreenState extends State<MapScreen> {
                                   onSetPetLocation: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (_) => const PetLocationScreen()),
+                                      MaterialPageRoute(builder: (_) => const CollarConnectionScreen()),
                                     );
                                   },
                                 )
@@ -617,7 +617,7 @@ class _MapLocationHint extends StatelessWidget {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: Text(
-              'set_pet_location'.tr(),
+              'connect_collar'.tr(),
               style: const TextStyle(
                 color: AppColors.primaryTeal,
                 fontWeight: FontWeight.w600,

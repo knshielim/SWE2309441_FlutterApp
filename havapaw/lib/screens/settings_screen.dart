@@ -5,14 +5,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
-import 'manual_collar_data_screen.dart';
 import 'account_settings_screen.dart';
 import 'language_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 import 'notification_settings_screen.dart';
 import 'sound_settings_screen.dart';
-import 'pet_location_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -307,20 +305,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // Data Management
           _SectionHeader('data_management'.tr()),
-          _SettingsTile(
-            icon: Icons.location_on_rounded,
-            label: 'set_pet_location'.tr(),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const PetLocationScreen()));
-            },
-          ),
-          _SettingsTile(
-            icon: Icons.edit_note_rounded,
-            label: 'manual_watch_data'.tr(),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualCollarDataScreen()));
-            },
-          ),
           const SizedBox(height: 20),
 
           // Preferences

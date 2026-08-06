@@ -23,6 +23,7 @@ import 'health_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
+import 'collar_connection_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -574,14 +575,25 @@ class _HomeTabState extends State<_HomeTab> {
                               _SectionCard(
                                 child: Padding(
                                   padding: const EdgeInsets.all(20),
-                                  child: Center(
-                                    child: Column(
-                                      children: [
-                                        Icon(Icons.watch_outlined, size: 40, color: AppColors.textGrey.withValues(alpha: 0.5)),
-                                        const SizedBox(height: 8),
-                                        Text('connect_smartwatch'.tr(), style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
-                                      ],
-                                    ),
+                                  child: Column(
+                                    children: [
+                                      Icon(Icons.bluetooth_rounded, size: 40, color: AppColors.textGrey.withValues(alpha: 0.5)),
+                                      const SizedBox(height: 8),
+                                      Text('connect_smartwatch'.tr(), style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
+                                      const SizedBox(height: 12),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.push(context, MaterialPageRoute(builder: (_) => const CollarConnectionScreen()));
+                                        },
+                                        icon: const Icon(Icons.bluetooth_rounded, size: 18),
+                                        label: Text('connect_collar'.tr()),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primaryTeal,
+                                          foregroundColor: Colors.white,
+                                          minimumSize: const Size(double.infinity, 40),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
