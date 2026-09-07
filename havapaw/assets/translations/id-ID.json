@@ -302,5 +302,14 @@
   "google": "Google",
   "facebook": "Facebook",
   "dont_have_account": "Belum punya akun? ",
-  "register_now": "Daftar Sekarang"
+  "register_now": "Daftar Sekarang",
+  "ml_model_prediction": "PREDIKSI MODEL",
+  "state_resting": "Istirahat",
+  "state_active": "Aktif",
+  "state_stressed": "Stres",
+  "state_anomaly": "Anomali",
+  "virtual_vet_unavailable": "Virtual Vet sedang tidak tersedia. Periksa koneksi Anda dan coba lagi.",
+  "baseline_calibrating_new": "Menggunakan rata-rata populasi — dipersonalisasi seiring data masuk",
+  "baseline_calibrating_progress": "Kalibrasi baseline: hari {days} dari {total}",
+  "baseline_fully_personalized": "Baseline sepenuhnya dipersonalisasi untuk hewan ini"
 }

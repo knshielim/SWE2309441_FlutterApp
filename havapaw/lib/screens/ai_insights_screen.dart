@@ -4,6 +4,9 @@ import '../theme/app_theme.dart';
 import '../services/collar_data_service.dart';
 import '../services/ai_health_insights_service.dart';
 import '../services/pet_service.dart';
+import '../services/ml_health_classifier_service.dart';
+import '../services/virtual_vet_service.dart';
+import '../services/baseline_calibration_service.dart';
 import '../models/collar_data.dart';
 import '../models/pet.dart';
 
@@ -22,6 +25,10 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
   List<HealthInsight> _insights = [];
   Pet? _pet;
   String _healthSummary = '';
+  CollarData? _latestReading;
+  List<CollarData> _historicalData = [];
+  MLClassificationResult? _mlResult;
+  CalibratedBaseline? _calibration;
 
   @override
   void initState() {
@@ -55,9 +62,24 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
         // Generate health summary
         final summary = AIHealthInsightsService.generateHealthSummary(pet, insights);
 
+        // Real Random Forest -> TFLite classification of the latest reading
+        // (see lib/services/ml_health_classifier_service.dart)
+        final mlResult = await MLHealthClassifierService.classify(
+          recentData.first,
+          pet,
+          historicalData,
+        );
+
+        // 30-day baseline personalization status (proposal Phase 4)
+        final calibration = BaselineCalibrationService.calibrate(pet, historicalData);
+
         setState(() {
           _insights = insights;
           _healthSummary = summary;
+          _latestReading = recentData.first;
+          _historicalData = historicalData;
+          _mlResult = mlResult;
+          _calibration = calibration;
           _hasData = true;
         });
       } else {
@@ -175,6 +197,16 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  // Real Random Forest / TFLite model prediction
+                  if (_mlResult != null) ...[
+                    _MLPredictionCard(
+                      result: _mlResult!,
+                      petName: _pet?.name ?? 'Your pet',
+                      calibration: _calibration,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
 
                   // Health summary card
                   if (_healthSummary.isNotEmpty) ...[
@@ -303,10 +335,147 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _AIQueryCard(pet: _pet, insights: _insights),
+                  _AIQueryCard(
+                    pet: _pet,
+                    insights: _insights,
+                    latestReading: _latestReading,
+                    historicalData: _historicalData,
+                  ),
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// Displays the live Random Forest / TFLite classification result: the
+/// predicted activity state and the model's confidence, with a small bar
+/// chart of all four class probabilities so the reasoning is transparent
+/// rather than a black-box label.
+class _MLPredictionCard extends StatelessWidget {
+  final MLClassificationResult result;
+  final String petName;
+  final CalibratedBaseline? calibration;
+
+  const _MLPredictionCard({required this.result, required this.petName, this.calibration});
+
+  (Color, IconData, String) _stateStyle(BuildContext context, PetActivityState state) {
+    switch (state) {
+      case PetActivityState.resting:
+        return (AppColors.primaryTeal, Icons.bedtime_rounded, 'state_resting'.tr());
+      case PetActivityState.active:
+        return (const Color(0xFF10B981), Icons.directions_run_rounded, 'state_active'.tr());
+      case PetActivityState.stressed:
+        return (AppColors.amber, Icons.psychology_rounded, 'state_stressed'.tr());
+      case PetActivityState.anomaly:
+        return (AppColors.alertRed, Icons.warning_amber_rounded, 'state_anomaly'.tr());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, icon, label) = _stateStyle(context, result.state);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('ml_model_prediction'.tr(),
+                        style: const TextStyle(fontSize: 12, color: AppColors.textGrey, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(label, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: color)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+                child: Text('${(result.confidence * 100).toStringAsFixed(0)}%',
+                    style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...PetActivityState.values.map((state) {
+            final prob = result.allProbabilities[state] ?? 0.0;
+            final (stateColor, _, stateLabel) = _stateStyle(context, state);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  SizedBox(width: 74, child: Text(stateLabel, style: const TextStyle(fontSize: 12, color: AppColors.textGrey))),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: prob,
+                        minHeight: 8,
+                        backgroundColor: AppColors.divider,
+                        valueColor: AlwaysStoppedAnimation(stateColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 36,
+                    child: Text('${(prob * 100).toStringAsFixed(0)}%',
+                        textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                  ),
+                ],
+              ),
+            );
+          }),
+          if (calibration != null) ...[
+            const SizedBox(height: 4),
+            Divider(height: 1, color: AppColors.divider.withValues(alpha: 0.6)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  calibration!.maturity >= 1.0 ? Icons.verified_rounded : Icons.hourglass_bottom_rounded,
+                  size: 15,
+                  color: AppColors.textGrey,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    calibration!.usedFallback
+                        ? 'baseline_calibrating_new'.tr()
+                        : calibration!.maturity >= 1.0
+                            ? 'baseline_fully_personalized'.tr()
+                            : 'baseline_calibrating_progress'.tr(namedArgs: {
+                                'days': calibration!.daysOfData.toString(),
+                                'total': BaselineCalibrationService.calibrationWindowDays.toString(),
+                              }),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -523,8 +692,15 @@ class _InsightCard extends StatelessWidget {
 class _AIQueryCard extends StatefulWidget {
   final Pet? pet;
   final List<HealthInsight> insights;
+  final CollarData? latestReading;
+  final List<CollarData> historicalData;
 
-  const _AIQueryCard({required this.pet, required this.insights});
+  const _AIQueryCard({
+    required this.pet,
+    required this.insights,
+    required this.latestReading,
+    required this.historicalData,
+  });
 
   @override
   State<_AIQueryCard> createState() => _AIQueryCardState();
@@ -534,38 +710,38 @@ class _AIQueryCardState extends State<_AIQueryCard> {
   final TextEditingController _queryController = TextEditingController();
   bool _isProcessing = false;
   String _response = '';
+  String? _error;
 
   Future<void> _submitQuery() async {
     final query = _queryController.text.trim();
-    if (query.isEmpty) return;
-
-    setState(() => _isProcessing = true);
-
-    // Simulate AI response (in production, this would call an LLM API)
-    await Future.delayed(const Duration(seconds: 2));
-
-    final response = _generateSimulatedResponse(query);
+    final pet = widget.pet;
+    final reading = widget.latestReading;
+    if (query.isEmpty || pet == null || reading == null) return;
 
     setState(() {
-      _response = response;
-      _isProcessing = false;
+      _isProcessing = true;
+      _error = null;
     });
-  }
 
-  String _generateSimulatedResponse(String query) {
-    final lowerQuery = query.toLowerCase();
-    final petName = widget.pet?.name ?? 'your pet';
-
-    if (lowerQuery.contains('health') || lowerQuery.contains('healthy')) {
-      return 'Based on the analysis, $petName\'s health indicators show ${widget.insights.where((i) => i.category == InsightCategory.health).isEmpty ? "normal patterns" : "some areas that need attention"}. ${widget.insights.isNotEmpty ? widget.insights.first.description : ""}';
-    } else if (lowerQuery.contains('exercise') || lowerQuery.contains('activity')) {
-      return '$petName\'s activity levels suggest ${widget.insights.where((i) => i.category == InsightCategory.exercise).isEmpty ? "adequate exercise" : "adjustments to exercise routine"}. Consider gradual increases in activity for better health outcomes.';
-    } else if (lowerQuery.contains('food') || lowerQuery.contains('eat') || lowerQuery.contains('diet')) {
-      return 'Nutrition analysis indicates ${widget.insights.where((i) => i.category == InsightCategory.nutrition).isEmpty ? "balanced intake" : "potential dietary adjustments"}. Monitor calorie intake relative to activity levels for optimal weight management.';
-    } else if (lowerQuery.contains('sleep') || lowerQuery.contains('rest')) {
-      return 'Rest patterns analysis shows ${widget.insights.where((i) => i.category == InsightCategory.behavior).isEmpty ? "normal sleep cycles" : "variations in rest patterns"}. Adequate rest is crucial for recovery and overall health.';
-    } else {
-      return 'Based on the available health data for $petName, I can provide insights about health status, activity patterns, nutrition, and behavior. The AI analysis has generated ${widget.insights.length} key insights with an average confidence of ${(widget.insights.map((i) => i.confidence).reduce((a, b) => a + b) / widget.insights.length * 100).toStringAsFixed(0)}%. Would you like me to elaborate on any specific aspect?';
+    try {
+      // Real GPT-4 Virtual Vet call via Firebase Cloud Function
+      // (see lib/services/virtual_vet_service.dart), grounded in the
+      // on-device Random Forest / TFLite classification.
+      final advice = await VirtualVetService.getAdvice(
+        pet: pet,
+        reading: reading,
+        historicalData: widget.historicalData,
+        question: query,
+      );
+      setState(() {
+        _response = advice.advice;
+        _isProcessing = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'virtual_vet_unavailable'.tr();
+        _isProcessing = false;
+      });
     }
   }
 
@@ -653,7 +829,24 @@ class _AIQueryCardState extends State<_AIQueryCard> {
               ],
             ),
           ),
-          if (_response.isNotEmpty) ...[
+          if (_error != null) ...[
+            const Divider(height: 1, color: AppColors.divider),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: AppColors.alertRed, size: 18),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(fontSize: 13, color: AppColors.alertRed),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (_response.isNotEmpty) ...[
             const Divider(height: 1, color: AppColors.divider),
             Padding(
               padding: const EdgeInsets.all(16),

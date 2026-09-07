@@ -48,6 +48,51 @@ class HealthIntelligenceService {
     'cat': {'min': 140.0, 'max': 220.0},
   };
 
+  /// Maps a dog's weight to the size class used by the training pipeline
+  /// (havapaw_ml/data/generate_dataset.py). Boundaries mirror common breed
+  /// weight ranges: toy (Chihuahua-like) through giant (Great Dane-like).
+  static String dogSizeClass(double weight) {
+    if (weight < 5) return 'toy';
+    if (weight < 12) return 'small';
+    if (weight < 30) return 'medium';
+    if (weight < 55) return 'large';
+    return 'giant';
+  }
+
+  /// Population-level RESTING heart rate baseline (the pet's expected normal
+  /// HR at rest) -- distinct from getIndividualizedHeartRateThreshold, which
+  /// is the alert CEILING. Mirrors resting_hr_baseline() in
+  /// havapaw_ml/data/generate_dataset.py exactly, since the ML model's
+  /// hr_deviation_pct feature was trained against this resting baseline, not
+  /// the ceiling. Used as the Bayesian prior in BaselineCalibrationService.
+  static double getPopulationRestingHeartRateBaseline(Pet pet) {
+    final age = calculatePetAge(pet.birthday);
+    final petType = pet.type.toLowerCase();
+
+    double base;
+    if (petType == 'cat') {
+      base = 170.0;
+    } else {
+      final sizeClass = dogSizeClass(pet.weight);
+      base = switch (sizeClass) {
+        'toy' => 135.0,
+        'small' => 110.0,
+        'medium' => 90.0,
+        'large' => 75.0,
+        'giant' => 65.0,
+        _ => 90.0,
+      };
+    }
+
+    if (age < 1) {
+      base += 15; // puppies/kittens run hotter
+    } else if (age > 8) {
+      base -= 8;
+    }
+
+    return base.clamp(45.0, 210.0);
+  }
+
   // Calculate Activity Index from accelerometer data (A(t) = sqrt(X² + Y² + Z²))
   static double calculateActivityIndex(double? x, double? y, double? z) {
     if (x == null || y == null || z == null) return 0.0;

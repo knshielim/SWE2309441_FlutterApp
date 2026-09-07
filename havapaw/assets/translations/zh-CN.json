@@ -302,5 +302,14 @@
   "google": "Google",
   "facebook": "Facebook",
   "dont_have_account": "没有账户？ ",
-  "register_now": "立即注册"
+  "register_now": "立即注册",
+  "ml_model_prediction": "模型预测",
+  "state_resting": "休息",
+  "state_active": "活跃",
+  "state_stressed": "压力",
+  "state_anomaly": "异常",
+  "virtual_vet_unavailable": "虚拟兽医暂时不可用，请检查网络连接后重试。",
+  "baseline_calibrating_new": "正在使用群体平均值——将随数据积累逐步个性化",
+  "baseline_calibrating_progress": "基线校准中：第 {days} 天，共 {total} 天",
+  "baseline_fully_personalized": "基线已完全针对该宠物个性化"
 }

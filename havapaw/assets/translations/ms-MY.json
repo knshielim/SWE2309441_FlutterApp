@@ -302,5 +302,14 @@
   "google": "Google",
   "facebook": "Facebook",
   "dont_have_account": "Belum mempunyai akaun? ",
-  "register_now": "Daftar Sekarang"
+  "register_now": "Daftar Sekarang",
+  "ml_model_prediction": "RAMALAN MODEL",
+  "state_resting": "Berehat",
+  "state_active": "Aktif",
+  "state_stressed": "Tertekan",
+  "state_anomaly": "Anomali",
+  "virtual_vet_unavailable": "Virtual Vet tidak tersedia sekarang. Sila periksa sambungan anda dan cuba lagi.",
+  "baseline_calibrating_new": "Menggunakan purata populasi — diperibadikan apabila data masuk",
+  "baseline_calibrating_progress": "Kalibrasi asas: hari {days} daripada {total}",
+  "baseline_fully_personalized": "Asas telah diperibadikan sepenuhnya untuk haiwan ini"
 }
