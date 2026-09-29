@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Keep your existing authenticated user rules for pets, etc.
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // TEMP (demo): allow ESP32 REST writes into collarData without Firebase Auth.
+    // Remove or tighten before any real production use.
+    match /users/{userId}/collarData/{docId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

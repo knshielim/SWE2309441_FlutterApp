@@ -311,5 +311,20 @@
   "virtual_vet_unavailable": "虚拟兽医暂时不可用，请检查网络连接后重试。",
   "baseline_calibrating_new": "正在使用群体平均值——将随数据积累逐步个性化",
   "baseline_calibrating_progress": "基线校准中：第 {days} 天，共 {total} 天",
-  "baseline_fully_personalized": "基线已完全针对该宠物个性化"
+  "baseline_fully_personalized": "基线已完全针对该宠物个性化",
+  "esp32_setup_hint": "请保持项圈开机并靠近手机。蓝牙配对后输入 WiFi，项圈即可向云端同步健康数据。",
+  "no_devices_found_hint": "未找到 ESP32 项圈。请刷入 HavaPaw 固件，打开项圈，并确认已开启蓝牙与定位。",
+  "wifi_credentials_title": "项圈 WiFi 设置",
+  "wifi_credentials_desc": "项圈通过 WiFi 向 HavaPaw 发送健康数据。请输入要连接的 2.4 GHz 网络。",
+  "wifi_ssid": "WiFi 名称 (SSID)",
+  "wifi_password": "WiFi 密码",
+  "provisioning_collar": "正在连接并发送 WiFi 设置…",
+  "select_pet_first": "连接项圈前请先添加或选择宠物。",
+  "must_be_signed_in": "请先登录以绑定项圈。",
+  "bluetooth_off": "请打开蓝牙后重试。",
+  "connection_failed": "无法通过蓝牙连接项圈。",
+  "gatt_service_missing": "该设备未运行 HavaPaw 项圈固件（缺少 BLE 服务）。",
+  "wifi_connect_failed": "项圈无法加入该 WiFi。请检查密码并使用 2.4 GHz 网络。",
+  "firebase_sync_failed": "项圈已连上 WiFi，但无法同步到 Firebase。请检查 Firestore 规则。",
+  "continue": "继续"
 }

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 // Data model for pet collar health and location readings
 class CollarData {
   final String? id;
@@ -74,7 +76,7 @@ class CollarData {
       calories: map['calories'],
       temperature: map['temperature']?.toDouble(),
       batteryLevel: map['batteryLevel'],
-      timestamp: DateTime.parse(map['timestamp'] ?? DateTime.now().toIso8601String()),
+      timestamp: _parseTimestamp(map['timestamp']),
       petId: map['petId'],
       latitude: map['latitude']?.toDouble(),
       longitude: map['longitude']?.toDouble(),
@@ -83,5 +85,26 @@ class CollarData {
       accelerometerZ: map['accelerometerZ']?.toDouble(),
       bloodOxygen: map['bloodOxygen']?.toDouble(),
     );
+  }
+
+  static DateTime _parseTimestamp(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
+    if (value is int) {
+      // Seconds vs millis heuristic
+      if (value > 9999999999) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      return DateTime.fromMillisecondsSinceEpoch(value * 1000);
+    }
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+    return DateTime.now();
   }
 }

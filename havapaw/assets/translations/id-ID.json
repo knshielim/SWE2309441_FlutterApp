@@ -311,5 +311,20 @@
   "virtual_vet_unavailable": "Virtual Vet sedang tidak tersedia. Periksa koneksi Anda dan coba lagi.",
   "baseline_calibrating_new": "Menggunakan rata-rata populasi — dipersonalisasi seiring data masuk",
   "baseline_calibrating_progress": "Kalibrasi baseline: hari {days} dari {total}",
-  "baseline_fully_personalized": "Baseline sepenuhnya dipersonalisasi untuk hewan ini"
+  "baseline_fully_personalized": "Baseline sepenuhnya dipersonalisasi untuk hewan ini",
+  "esp32_setup_hint": "Pastikan collar menyala dan dekat. Setelah pairing BLE, masukkan WiFi agar data kesehatan tersinkron ke cloud.",
+  "no_devices_found_hint": "Collar ESP32 tidak ditemukan. Flash firmware HavaPaw, nyalakan collar, dan pastikan Bluetooth + Lokasi aktif.",
+  "wifi_credentials_title": "Pengaturan WiFi Collar",
+  "wifi_credentials_desc": "Collar memakai WiFi untuk mengirim data kesehatan ke HavaPaw. Masukkan jaringan 2.4 GHz.",
+  "wifi_ssid": "Nama WiFi (SSID)",
+  "wifi_password": "Kata sandi WiFi",
+  "provisioning_collar": "Menghubungkan dan mengirim pengaturan WiFi…",
+  "select_pet_first": "Tambah atau pilih hewan peliharaan sebelum menghubungkan collar.",
+  "must_be_signed_in": "Silakan masuk untuk mengikat collar.",
+  "bluetooth_off": "Nyalakan Bluetooth lalu coba lagi.",
+  "connection_failed": "Tidak dapat terhubung ke collar melalui Bluetooth.",
+  "gatt_service_missing": "Perangkat ini tidak menjalankan firmware collar HavaPaw (layanan BLE tidak ada).",
+  "wifi_connect_failed": "Collar tidak dapat bergabung ke WiFi itu. Periksa kata sandi dan gunakan WiFi 2.4 GHz.",
+  "firebase_sync_failed": "Collar terhubung WiFi tetapi gagal sinkron ke Firebase. Periksa aturan Firestore.",
+  "continue": "Lanjut"
 }

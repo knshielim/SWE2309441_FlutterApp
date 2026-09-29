@@ -311,5 +311,20 @@
   "virtual_vet_unavailable": "Virtual Vet tidak tersedia sekarang. Sila periksa sambungan anda dan cuba lagi.",
   "baseline_calibrating_new": "Menggunakan purata populasi — diperibadikan apabila data masuk",
   "baseline_calibrating_progress": "Kalibrasi asas: hari {days} daripada {total}",
-  "baseline_fully_personalized": "Asas telah diperibadikan sepenuhnya untuk haiwan ini"
+  "baseline_fully_personalized": "Asas telah diperibadikan sepenuhnya untuk haiwan ini",
+  "esp32_setup_hint": "Pastikan kolar dihidupkan dan berhampiran. Selepas pasangan BLE, masukkan WiFi supaya data kesihatan disegerakkan ke awan.",
+  "no_devices_found_hint": "Kolar ESP32 tidak dijumpai. Flash firmware HavaPaw, hidupkan kolar, dan pastikan Bluetooth + Lokasi diaktifkan.",
+  "wifi_credentials_title": "Tetapan WiFi Kolar",
+  "wifi_credentials_desc": "Kolar menggunakan WiFi untuk menghantar data kesihatan ke HavaPaw. Masukkan rangkaian 2.4 GHz.",
+  "wifi_ssid": "Nama WiFi (SSID)",
+  "wifi_password": "Kata laluan WiFi",
+  "provisioning_collar": "Menyambung dan menghantar tetapan WiFi…",
+  "select_pet_first": "Tambah atau pilih haiwan peliharaan sebelum menyambung kolar.",
+  "must_be_signed_in": "Sila log masuk untuk mengikat kolar.",
+  "bluetooth_off": "Hidupkan Bluetooth dan cuba lagi.",
+  "connection_failed": "Tidak dapat menyambung ke kolar melalui Bluetooth.",
+  "gatt_service_missing": "Peranti ini tidak menjalankan firmware kolar HavaPaw (perkhidmatan BLE tiada).",
+  "wifi_connect_failed": "Kolar tidak dapat menyertai WiFi itu. Semak kata laluan dan gunakan WiFi 2.4 GHz.",
+  "firebase_sync_failed": "Kolar menyertai WiFi tetapi gagal segerak ke Firebase. Semak peraturan Firestore.",
+  "continue": "Teruskan"
 }

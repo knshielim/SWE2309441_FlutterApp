@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>HavaPaw needs Bluetooth to find and set up your ESP32 pet collar.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>HavaPaw needs Bluetooth to communicate with your ESP32 pet collar.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Location is required on some devices to scan for nearby Bluetooth collars and show pet GPS.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 	<string>remote-notification</string>
