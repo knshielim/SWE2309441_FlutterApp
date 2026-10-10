@@ -13,20 +13,39 @@ format" (proposal Figure 3) actually work on a phone.
 
 The Random Forest remains the model that is trained and evaluated for the FYP
 report's accuracy figures; the distilled network is only the deployment artifact.
+
+CHANGES FROM THE ORIGINAL: paths are relative to this file, and the optional
+--copy-to-app flag copies the new model and metadata into the Flutter app's
+assets so you cannot forget a file.
+
+USAGE (from the havapaw_ml folder; needs tensorflow installed):
+    python distill_to_tflite.py
+    python distill_to_tflite.py --copy-to-app
 """
 
+import argparse
 import json
+import shutil
+from pathlib import Path
+
+import joblib
 import numpy as np
 import pandas as pd
-import joblib
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
-MODEL_PATH = "/home/claude/havapaw_ml/models/random_forest_model.joblib"
-STATS_PATH = "/home/claude/havapaw_ml/models/feature_stats.json"
-DATA_PATH = "/home/claude/havapaw_ml/data/pet_health_dataset.csv"
-TFLITE_PATH = "/home/claude/havapaw_ml/models/pet_health_classifier.tflite"
-LABELS_PATH = "/home/claude/havapaw_ml/models/labels.json"
+ROOT = Path(__file__).resolve().parent
+MODEL_PATH = ROOT / "models" / "random_forest_model.joblib"
+STATS_PATH = ROOT / "models" / "feature_stats.json"
+DATA_PATH = ROOT / "data" / "pet_health_dataset.csv"
+TFLITE_PATH = ROOT / "models" / "pet_health_classifier.tflite"
+LABELS_PATH = ROOT / "models" / "labels.json"
+APP_ASSETS = ROOT.parent / "havapaw" / "assets" / "ml"
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--copy-to-app", action="store_true",
+                    help="copy the .tflite and metadata into havapaw/assets/ml/")
+args = parser.parse_args()
 
 bundle = joblib.load(MODEL_PATH)
 rf = bundle["model"]
@@ -87,3 +106,9 @@ with open(LABELS_PATH, "w") as f:
         "distillation_agreement_with_rf": agreement,
     }, f, indent=2)
 print(f"Metadata written to {LABELS_PATH}")
+
+if args.copy_to_app:
+    APP_ASSETS.mkdir(parents=True, exist_ok=True)
+    shutil.copy(TFLITE_PATH, APP_ASSETS / "pet_health_classifier.tflite")
+    shutil.copy(LABELS_PATH, APP_ASSETS / "model_metadata.json")
+    print(f"Copied model and metadata to {APP_ASSETS}")
