@@ -13,29 +13,29 @@
     "species_encoded"
   ],
   "mean": {
-    "heart_rate": 151.1705125,
-    "temperature": 38.892085625,
-    "spo2": 96.71691875,
-    "activity_index": 1.1946691249999999,
-    "steps": 188.646125,
-    "activity_ratio_3day": 0.9991893749999999,
-    "hr_deviation_pct": 22.3800675,
-    "temp_deviation_c": -0.782020625,
-    "age": 4.023625,
-    "weight": 18.033820625,
-    "species_encoded": 0.602625
+    "heart_rate": 147.578875,
+    "temperature": 38.872347500000004,
+    "spo2": 96.7145875,
+    "activity_index": 1.2030364375,
+    "steps": 195.289625,
+    "activity_ratio_3day": 1.0093112499999999,
+    "hr_deviation_pct": 22.70001625,
+    "temp_deviation_c": -0.7799025,
+    "age": 3.936825,
+    "weight": 18.626974999999998,
+    "species_encoded": 0.64
   },
   "std": {
-    "heart_rate": 51.65514311373529,
-    "temperature": 0.5749260192962555,
-    "spo2": 2.0011305338762355,
-    "activity_index": 0.3081569307026951,
-    "steps": 274.41846442219475,
-    "activity_ratio_3day": 0.5028594952783619,
-    "hr_deviation_pct": 31.857370569056183,
-    "temp_deviation_c": 0.5671315991154778,
-    "age": 3.8456567500382746,
-    "weight": 21.23112755178454,
-    "species_encoded": 0.48937008190868875
+    "heart_rate": 50.92212747348668,
+    "temperature": 0.5566412375448467,
+    "spo2": 2.0298616888838756,
+    "activity_index": 1.135648092620113,
+    "steps": 279.042080424306,
+    "activity_ratio_3day": 0.5053915990746318,
+    "hr_deviation_pct": 31.933168742177084,
+    "temp_deviation_c": 0.5522022147267447,
+    "age": 3.6997788031278986,
+    "weight": 21.330156025487238,
+    "species_encoded": 0.48001500070316167
   }
 }
