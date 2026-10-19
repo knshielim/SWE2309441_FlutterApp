@@ -26,16 +26,16 @@ class PetLocationService {
       final locationData = snapshot.docs
           .map((doc) => doc.data())
           .where((data) {
-            final lat = data['latitude'] as double?;
-            final lng = data['longitude'] as double?;
+            final lat = (data['latitude'] as num?)?.toDouble();
+            final lng = (data['longitude'] as num?)?.toDouble();
             return lat != null && lng != null && lat.isFinite && lng.isFinite;
           })
           .toList();
       
       if (locationData.isEmpty) return null;
       final data = locationData.first;
-      final lat = data['latitude'] as double;
-      final lng = data['longitude'] as double;
+      final lat = (data['latitude'] as num).toDouble();
+      final lng = (data['longitude'] as num).toDouble();
       return LatLng(lat, lng);
     });
   }
@@ -59,17 +59,20 @@ class PetLocationService {
       final locationData = snapshot.docs
           .map((doc) => doc.data())
           .where((data) {
-            final lat = data['latitude'] as double?;
-            final lng = data['longitude'] as double?;
+            final lat = (data['latitude'] as num?)?.toDouble();
+            final lng = (data['longitude'] as num?)?.toDouble();
             return lat != null && lng != null && lat.isFinite && lng.isFinite;
           })
           .toList();
       
       if (locationData.isEmpty) return null;
       final data = locationData.first;
-      final timestamp = data['timestamp'] as Timestamp?;
-      if (timestamp == null) return null;
-      return timestamp.toDate();
+      // The collar's ingest function stores an ISO-8601 string; older
+      // documents may hold a Firestore Timestamp.
+      final timestamp = data['timestamp'];
+      if (timestamp is Timestamp) return timestamp.toDate();
+      if (timestamp is String) return DateTime.tryParse(timestamp);
+      return null;
     });
   }
 }
