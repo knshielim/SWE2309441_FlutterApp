@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
-import '../firebase_options.dart';
+import '../config/collar_config.dart';
 import '../models/pet.dart';
 import '../services/esp32_ble_service.dart';
 import '../services/pet_service.dart';
@@ -309,18 +311,29 @@ class _CollarConnectionScreenState extends State<CollarConnectionScreen> {
     });
 
     try {
-      final options = DefaultFirebaseOptions.currentPlatform;
+      // Secret the collar will send with every upload. It is registered in
+      // Firestore (readable only by the Cloud Function) before the collar gets it.
+      final token = _generateDeviceToken();
       final collarId = await Esp32BleService.provisionAndBind(
         collar: device,
         payload: CollarProvisionPayload(
           wifiSsid: wifi.$1,
           wifiPassword: wifi.$2,
-          ownerUid: uid,
-          petId: pet.id!,
-          projectId: options.projectId,
-          apiKey: options.apiKey,
+          ingestUrl: CollarConfig.ingestUrl,
+          deviceToken: token,
           deviceId: device.name,
         ),
+        onDeviceIdResolved: (boundId) async {
+          await FirebaseFirestore.instance
+              .collection('deviceTokens')
+              .doc(boundId)
+              .set({
+            'uid': uid,
+            'petId': pet.id,
+            'token': token,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        },
       );
 
       await PetService.updatePet(pet.id!, {'collarId': collarId});
@@ -355,6 +368,14 @@ class _CollarConnectionScreenState extends State<CollarConnectionScreen> {
         _statusMessage = _mapError(e);
       });
     }
+  }
+
+  /// 32 random bytes as 64 hex characters.
+  String _generateDeviceToken() {
+    final rng = Random.secure();
+    return List.generate(32, (_) => rng.nextInt(256))
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
   }
 
   Future<Pet?> _resolveSelectedPet() async {

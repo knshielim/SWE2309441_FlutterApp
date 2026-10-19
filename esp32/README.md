@@ -1,33 +1,13 @@
-# HavaPaw ESP32 Collar
+# Collar firmware has moved
 
-This firmware works with the Flutter **Connect Collar** screen.
+The sketch that used to live here posted **random demo values** and wrote to Firestore without
+authentication. It has been removed.
 
-## What it does
+Use **`HavaPaw_Arduino/havapaw_collar/havapaw_collar.ino`** (with `havapaw_sensors.h`). It reads the real
+MAX30102, MPU6050, DS18B20 and NEO-6M GPS, is provisioned over BLE by the app, and uploads to the
+`ingestCollarData` Cloud Function with a per-device secret token.
 
-1. **Bluetooth** – advertises as `HavaPaw-ESP32-XXXX` and accepts WiFi + account binding from the app  
-2. **WiFi** – joins the 2.4 GHz network you enter in the app  
-3. **Firestore** – posts sensor readings to `users/{uid}/collarData`
+`HavaPaw_Arduino/HavaPaw_Arduino.ino` is a separate bench sketch (deep sleep + Realtime Database).
+It is not used by the app.
 
-## Setup (Arduino IDE)
-
-1. Install **ESP32** board support (Espressif)  
-2. Install library **ArduinoJson** (Benoit Blanchon)  
-3. Open `havapaw_collar.ino`  
-4. Board: **ESP32 Dev Module** (or your board)  
-5. Upload
-
-## App pairing
-
-1. Power the ESP32  
-2. In HavaPaw: select a pet → **Connect Collar** → **Scan**  
-3. Tap `HavaPaw-ESP32-…`  
-4. Enter **2.4 GHz** WiFi SSID + password  
-5. Wait for success – `pet.collarId` is saved automatically  
-
-## Firestore rules
-
-Unauthenticated REST writes from the ESP32 are blocked by default Firebase rules. For demos you can temporarily allow writes to `collarData`, or harden later with a Cloud Function / device token.
-
-## Sensors
-
-The sketch posts demo heart rate / temperature / steps / battery. Replace those with your real sensors (MAX30102, MPU6050, GPS, etc.) in `postCollarReading()`.
+Firestore rules now live in `havapaw/firestore.rules`.

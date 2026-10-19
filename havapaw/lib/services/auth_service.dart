@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'notification_service.dart';
+
 // Handles user login, registration, and profile updates.
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -43,6 +45,7 @@ class AuthService {
 
   // Signs out the current user.
   static Future<void> signOut() async {
+    await NotificationService.removeTokenForCurrentUser();
     await _auth.signOut();
   }
 
