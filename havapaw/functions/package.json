@@ -10,5 +10,8 @@
     "firebase-functions": "^6.0.1",
     "openai": "^4.67.3"
   },
-  "private": true
+  "private": true,
+  "scripts": {
+    "test": "node --test test/rules.test.js"
+  }
 }

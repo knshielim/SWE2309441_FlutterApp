@@ -3,26 +3,25 @@
  *
  * Flow:
  *  1) Advertises as HavaPaw-ESP32-XXXX over BLE
- *  2) App writes JSON config to the Config characteristic
- *  3) ESP32 joins WiFi and posts readings to Firestore REST
+ *  2) App writes a JSON config {ssid, pass, url, token, deviceId} to the Config characteristic
+ *     (and registers the token in Firestore: deviceTokens/{deviceId})
+ *  3) ESP32 joins Wi-Fi and POSTs a reading every 30 s to the ingestCollarData Cloud Function,
+ *     sending the secret token in the X-Device-Token header. The function writes
+ *     users/{uid}/collarData/{autoId}; no Firestore credentials are stored on the collar.
  *
  * Sensors (see havapaw_sensors.h for wiring and tuning constants):
- *   MAX30102 -> heart rate + SpO2, MPU6050 -> acceleration + steps, DS18B20 -> temperature
+ *   MAX30102 -> heart rate + SpO2, MPU6050 -> acceleration + steps, DS18B20 -> temperature,
+ *   NEO-6M   -> GPS (RX2 = GPIO16 <- GPS TX, TX2 = GPIO17 -> GPS RX)
+ *
+ * Power: the sensor task must run continuously (heart rate needs a steady PPG stream and the
+ * step counter uses a 5-minute window), so deep sleep is not used. Instead the CPU runs at
+ * 80 MHz, Wi-Fi modem sleep is on, uploads are 30 s apart and BLE advertising stops after
+ * pairing. Set BATTERY_ADC_PIN in havapaw_sensors.h to enable battery reporting and the
+ * low-battery push notification.
  *
  * Arduino IDE boards: ESP32 Dev Module
  * Libraries: ArduinoJson 6.x (Benoit Blanchon), SparkFun MAX3010x, Adafruit MPU6050,
- *            OneWire, DallasTemperature
- *
- * Firestore path written:
- *   users/{uid}/collarData/{autoId}
- *
- * Required Firestore rule example (school / demo — tighten for production):
- *   match /users/{userId}/collarData/{docId} {
- *     allow read, write: if request.auth != null && request.auth.uid == userId
- *                        || true; // temporarily allow device writes without auth
- *   }
- *
- * Better long-term: Cloud Function endpoint or Firebase Auth anonymous token.
+ *            OneWire, DallasTemperature, TinyGPSPlus
  */
 
 #include <BLEDevice.h>
@@ -31,6 +30,8 @@
 #include <BLE2902.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <TinyGPSPlus.h>   // Library Manager: "TinyGPSPlus" by Mikal Hart
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include "havapaw_sensors.h"
@@ -41,6 +42,21 @@
 #define STATUS_CHAR_UUID    "7b1e0003-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
 #define DEVICE_ID_CHAR_UUID "7b1e0004-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
 
+// ---- GPS (NEO-6M) ----------------------------------------------------------
+#define GPS_RX_PIN 16          // ESP32 RX2  <- GPS TX
+#define GPS_TX_PIN 17          // ESP32 TX2  -> GPS RX
+#define GPS_MAX_AGE_MS 120000  // a position older than this is not sent
+HardwareSerial gpsSerial(2);
+TinyGPSPlus gps;
+double lastLat = 0, lastLng = 0;
+uint32_t lastFixMs = 0;
+bool haveFix = false;
+
+// Power: BLE stops advertising this long after boot once the collar is provisioned
+// (power-cycle the collar to pair it again).
+const unsigned long BLE_ADVERTISE_WINDOW_MS = 120000;
+bool bleAdvertisingStopped = false;
+
 Preferences prefs;
 BLECharacteristic *statusChar = nullptr;
 BLECharacteristic *deviceIdChar = nullptr;
@@ -48,15 +64,13 @@ BLECharacteristic *deviceIdChar = nullptr;
 String deviceId;
 String wifiSsid;
 String wifiPass;
-String ownerUid;
-String petId;
-String projectId;
-String apiKey;
+String ingestUrl;   // https://<region>-<project>.cloudfunctions.net/ingestCollarData
+String deviceToken; // 64-hex secret registered by the app in deviceTokens/{deviceId}
 
 String configBuffer;
 bool provisionPending = false;
 unsigned long lastPostMs = 0;
-const unsigned long POST_INTERVAL_MS = 15000;
+const unsigned long POST_INTERVAL_MS = 30000;   // one upload every 30 s (proposal duty cycle)
 
 void notifyStatus(const String &msg) {
   Serial.println("[STATUS] " + msg);
@@ -97,8 +111,8 @@ bool postCollarReading() {
   if (WiFi.status() != WL_CONNECTED) {
     if (!connectWifi()) return false;
   }
-  if (ownerUid.isEmpty() || projectId.isEmpty() || apiKey.isEmpty()) {
-    notifyStatus("ERROR:missing_firebase_config");
+  if (ingestUrl.isEmpty() || deviceToken.length() != 64) {
+    notifyStatus("ERROR:missing_config");
     return false;
   }
 
@@ -117,60 +131,51 @@ bool postCollarReading() {
     return false;
   }
 
-  String url = "https://firestore.googleapis.com/v1/projects/" + projectId +
-               "/databases/(default)/documents/users/" + ownerUid +
-               "/collarData?key=" + apiKey;
-
-  DynamicJsonDocument doc(2048);
-  JsonObject fields = doc.createNestedObject("fields");
-
-  auto setString = [&](const char *key, const String &val) {
-    fields[key]["stringValue"] = val;
-  };
-  auto setInt = [&](const char *key, int val) {
-    fields[key]["integerValue"] = String(val);
-  };
-  auto setDouble = [&](const char *key, double val) {
-    fields[key]["doubleValue"] = val;
-  };
-
-  setString("deviceId", deviceId);
-  setString("deviceName", deviceId);
-  setString("petId", petId);
+  StaticJsonDocument<768> doc;
+  doc["deviceId"] = deviceId;
 
   time_t now = time(nullptr);
-  char iso[40];
   if (now > 100000) {
+    char iso[32];
     strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
-  } else {
-    // NTP not ready — still send a parseable stamp; app will tolerate it
-    snprintf(iso, sizeof(iso), "2026-01-01T00:00:00Z");
+    doc["timestamp"] = iso;   // server falls back to its own clock if this is missing or far off
   }
-  setString("timestamp", String(iso));
 
-  setInt("heartRate", s.heartRate);
-  setDouble("temperature", roundf(s.tempC * 100.0f) / 100.0f);
-  if (s.spo2Valid) setDouble("bloodOxygen", roundf(s.spo2));
-  if (s.stepsValid) setInt("steps", (int)s.steps);
+  doc["heartRate"] = s.heartRate;
+  doc["temperature"] = roundf(s.tempC * 100.0f) / 100.0f;
+  if (s.spo2Valid) doc["bloodOxygen"] = roundf(s.spo2);
+  if (s.stepsValid) doc["steps"] = (int)s.steps;
   if (s.mpuOk) {
     // Latest single accelerometer sample in g; the app computes x^2+y^2+z^2 from it
-    setDouble("accelerometerX", roundf(s.ax * 1000.0f) / 1000.0f);
-    setDouble("accelerometerY", roundf(s.ay * 1000.0f) / 1000.0f);
-    setDouble("accelerometerZ", roundf(s.az * 1000.0f) / 1000.0f);
+    doc["accelerometerX"] = roundf(s.ax * 1000.0f) / 1000.0f;
+    doc["accelerometerY"] = roundf(s.ay * 1000.0f) / 1000.0f;
+    doc["accelerometerZ"] = roundf(s.az * 1000.0f) / 1000.0f;
   }
-  if (s.batteryPct >= 0) setInt("batteryLevel", s.batteryPct);
+  if (s.batteryPct >= 0) doc["batteryLevel"] = s.batteryPct;
+
+  // Last good GPS position (not older than GPS_MAX_AGE_MS). Without a fix the app
+  // simply keeps showing the previous location.
+  if (haveFix && (millis() - lastFixMs) < GPS_MAX_AGE_MS) {
+    doc["latitude"] = lastLat;
+    doc["longitude"] = lastLng;
+  }
 
   String body;
   serializeJson(doc, body);
 
+  // TLS: certificate is NOT verified here (setInsecure). The token is a bearer secret,
+  // so for anything beyond a pilot pin the Google root CA with client.setCACert(...).
+  WiFiClientSecure client;
+  client.setInsecure();
   HTTPClient http;
-  http.begin(url);
+  http.begin(client, ingestUrl);
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-Device-Token", deviceToken);
   int code = http.POST(body);
   String resp = http.getString();
   http.end();
 
-  Serial.printf("Firestore POST %d: %s\n", code, resp.c_str());
+  Serial.printf("Ingest POST %d: %s\n", code, resp.c_str());
   if (code >= 200 && code < 300) {
     notifyStatus("FIREBASE_OK");
     return true;
@@ -189,20 +194,16 @@ void applyConfigJson(const String &json) {
 
   wifiSsid = doc["ssid"] | "";
   wifiPass = doc["pass"] | "";
-  ownerUid = doc["uid"] | "";
-  petId = doc["petId"] | "";
-  projectId = doc["projectId"] | "";
-  apiKey = doc["apiKey"] | "";
+  ingestUrl = doc["url"] | "";
+  deviceToken = doc["token"] | "";
   String incomingId = doc["deviceId"] | "";
   if (incomingId.length() > 0) deviceId = incomingId;
 
   prefs.begin("havapaw", false);
   prefs.putString("ssid", wifiSsid);
   prefs.putString("pass", wifiPass);
-  prefs.putString("uid", ownerUid);
-  prefs.putString("petId", petId);
-  prefs.putString("projectId", projectId);
-  prefs.putString("apiKey", apiKey);
+  prefs.putString("url", ingestUrl);
+  prefs.putString("token", deviceToken);
   prefs.putString("deviceId", deviceId);
   prefs.end();
 
@@ -273,10 +274,8 @@ void loadSavedConfig() {
   prefs.begin("havapaw", true);
   wifiSsid = prefs.getString("ssid", "");
   wifiPass = prefs.getString("pass", "");
-  ownerUid = prefs.getString("uid", "");
-  petId = prefs.getString("petId", "");
-  projectId = prefs.getString("projectId", "");
-  apiKey = prefs.getString("apiKey", "");
+  ingestUrl = prefs.getString("url", "");
+  deviceToken = prefs.getString("token", "");
   deviceId = prefs.getString("deviceId", "");
   prefs.end();
   if (deviceId.isEmpty()) deviceId = makeDeviceId();
@@ -285,7 +284,9 @@ void loadSavedConfig() {
 void setup() {
   Serial.begin(115200);
   delay(500);
+  setCpuFrequencyMhz(80);   // enough for BLE + Wi-Fi + the 50 Hz sensor task; saves power
   sensorsBegin();
+  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   loadSavedConfig();
   setupBle();
   notifyStatus("READY");
@@ -298,8 +299,29 @@ void setup() {
   }
 }
 
+void updateGps() {
+  while (gpsSerial.available() > 0) gps.encode(gpsSerial.read());
+  if (gps.location.isValid() && gps.location.isUpdated()) {
+    lastLat = gps.location.lat();
+    lastLng = gps.location.lng();
+    lastFixMs = millis();
+    haveFix = true;
+  }
+}
+
 void loop() {
+  updateGps();
+
+  // Once paired and online, stop advertising to save power (power-cycle to re-pair).
+  if (!bleAdvertisingStopped && !deviceToken.isEmpty() && WiFi.status() == WL_CONNECTED &&
+      millis() > BLE_ADVERTISE_WINDOW_MS) {
+    BLEDevice::getAdvertising()->stop();
+    bleAdvertisingStopped = true;
+    Serial.println("BLE advertising stopped (provisioned)");
+  }
+
   if (provisionPending) {
+    bleAdvertisingStopped = false;
     provisionPending = false;
     if (connectWifi()) {
       // Try an immediate sync so the app can confirm FIREBASE_OK
@@ -307,10 +329,10 @@ void loop() {
     }
   }
 
-  if (WiFi.status() == WL_CONNECTED && !ownerUid.isEmpty() && millis() - lastPostMs > POST_INTERVAL_MS) {
+  if (WiFi.status() == WL_CONNECTED && !deviceToken.isEmpty() && millis() - lastPostMs > POST_INTERVAL_MS) {
     lastPostMs = millis();
     postCollarReading();
   }
 
-  delay(50);
+  delay(20);
 }

@@ -1,0 +1,1943 @@
+From 825b724368ac53bca04b330d3c342691cd680810 Mon Sep 17 00:00:00 2001
+From: HavaPaw <dev@example.com>
+Date: Mon, 19 Oct 2026 00:28:16 +0000
+Subject: [PATCH] Close proposal gaps: push alerts, authenticated collar
+ ingest, GPS, consent
+
+---
+ HavaPaw_Arduino/havapaw_collar.ino            | 164 +++++-----
+ docs/ALERTS_AND_COLLAR_SETUP.md               |  55 ++++
+ esp32/README.md                               |  38 +--
+ esp32/firestore.rules.snippet                 |  16 -
+ esp32/havapaw_collar/havapaw_collar.ino       | 299 ------------------
+ havapaw/firebase.json                         |  32 +-
+ havapaw/firestore.rules                       |  32 ++
+ havapaw/functions/index.js                    | 236 ++++++++++++++
+ havapaw/functions/lib/rules.js                | 160 ++++++++++
+ havapaw/functions/package.json                |   5 +-
+ havapaw/functions/test/rules.test.js          |  64 ++++
+ havapaw/lib/config/collar_config.dart         |  10 +
+ havapaw/lib/main.dart                         |   4 +-
+ .../lib/screens/collar_connection_screen.dart |  33 +-
+ havapaw/lib/screens/consent_screen.dart       | 199 ++++++++++++
+ havapaw/lib/screens/login_screen.dart         |   6 +-
+ .../screens/notification_settings_screen.dart |  20 ++
+ havapaw/lib/screens/register_screen.dart      |   4 +-
+ havapaw/lib/services/auth_service.dart        |   3 +
+ havapaw/lib/services/collar_ble_protocol.dart |   4 +-
+ havapaw/lib/services/esp32_ble_service.dart   |  33 +-
+ .../lib/services/notification_service.dart    |  47 +++
+ havapaw/lib/services/walk_state_service.dart  |  13 +
+ 23 files changed, 1030 insertions(+), 447 deletions(-)
+ create mode 100644 docs/ALERTS_AND_COLLAR_SETUP.md
+ delete mode 100644 esp32/firestore.rules.snippet
+ delete mode 100644 esp32/havapaw_collar/havapaw_collar.ino
+ create mode 100644 havapaw/firestore.rules
+ create mode 100644 havapaw/functions/lib/rules.js
+ create mode 100644 havapaw/functions/test/rules.test.js
+ create mode 100644 havapaw/lib/config/collar_config.dart
+ create mode 100644 havapaw/lib/screens/consent_screen.dart
+
+diff --git a/HavaPaw_Arduino/havapaw_collar.ino b/HavaPaw_Arduino/havapaw_collar.ino
+index 139577d..7494781 100644
+--- a/HavaPaw_Arduino/havapaw_collar.ino
++++ b/HavaPaw_Arduino/havapaw_collar.ino
+@@ -3,26 +3,25 @@
+  *
+  * Flow:
+  *  1) Advertises as HavaPaw-ESP32-XXXX over BLE
+- *  2) App writes JSON config to the Config characteristic
+- *  3) ESP32 joins WiFi and posts readings to Firestore REST
++ *  2) App writes a JSON config {ssid, pass, url, token, deviceId} to the Config characteristic
++ *     (and registers the token in Firestore: deviceTokens/{deviceId})
++ *  3) ESP32 joins Wi-Fi and POSTs a reading every 30 s to the ingestCollarData Cloud Function,
++ *     sending the secret token in the X-Device-Token header. The function writes
++ *     users/{uid}/collarData/{autoId}; no Firestore credentials are stored on the collar.
+  *
+  * Sensors (see havapaw_sensors.h for wiring and tuning constants):
+- *   MAX30102 -> heart rate + SpO2, MPU6050 -> acceleration + steps, DS18B20 -> temperature
++ *   MAX30102 -> heart rate + SpO2, MPU6050 -> acceleration + steps, DS18B20 -> temperature,
++ *   NEO-6M   -> GPS (RX2 = GPIO16 <- GPS TX, TX2 = GPIO17 -> GPS RX)
++ *
++ * Power: the sensor task must run continuously (heart rate needs a steady PPG stream and the
++ * step counter uses a 5-minute window), so deep sleep is not used. Instead the CPU runs at
++ * 80 MHz, Wi-Fi modem sleep is on, uploads are 30 s apart and BLE advertising stops after
++ * pairing. Set BATTERY_ADC_PIN in havapaw_sensors.h to enable battery reporting and the
++ * low-battery push notification.
+  *
+  * Arduino IDE boards: ESP32 Dev Module
+  * Libraries: ArduinoJson 6.x (Benoit Blanchon), SparkFun MAX3010x, Adafruit MPU6050,
+- *            OneWire, DallasTemperature
+- *
+- * Firestore path written:
+- *   users/{uid}/collarData/{autoId}
+- *
+- * Required Firestore rule example (school / demo — tighten for production):
+- *   match /users/{userId}/collarData/{docId} {
+- *     allow read, write: if request.auth != null && request.auth.uid == userId
+- *                        || true; // temporarily allow device writes without auth
+- *   }
+- *
+- * Better long-term: Cloud Function endpoint or Firebase Auth anonymous token.
++ *            OneWire, DallasTemperature, TinyGPSPlus
+  */
+ 
+ #include <BLEDevice.h>
+@@ -31,6 +30,8 @@
+ #include <BLE2902.h>
+ #include <WiFi.h>
+ #include <HTTPClient.h>
++#include <WiFiClientSecure.h>
++#include <TinyGPSPlus.h>   // Library Manager: "TinyGPSPlus" by Mikal Hart
+ #include <ArduinoJson.h>
+ #include <Preferences.h>
+ #include "havapaw_sensors.h"
+@@ -41,6 +42,21 @@
+ #define STATUS_CHAR_UUID    "7b1e0003-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
+ #define DEVICE_ID_CHAR_UUID "7b1e0004-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
+ 
++// ---- GPS (NEO-6M) ----------------------------------------------------------
++#define GPS_RX_PIN 16          // ESP32 RX2  <- GPS TX
++#define GPS_TX_PIN 17          // ESP32 TX2  -> GPS RX
++#define GPS_MAX_AGE_MS 120000  // a position older than this is not sent
++HardwareSerial gpsSerial(2);
++TinyGPSPlus gps;
++double lastLat = 0, lastLng = 0;
++uint32_t lastFixMs = 0;
++bool haveFix = false;
++
++// Power: BLE stops advertising this long after boot once the collar is provisioned
++// (power-cycle the collar to pair it again).
++const unsigned long BLE_ADVERTISE_WINDOW_MS = 120000;
++bool bleAdvertisingStopped = false;
++
+ Preferences prefs;
+ BLECharacteristic *statusChar = nullptr;
+ BLECharacteristic *deviceIdChar = nullptr;
+@@ -48,15 +64,13 @@ BLECharacteristic *deviceIdChar = nullptr;
+ String deviceId;
+ String wifiSsid;
+ String wifiPass;
+-String ownerUid;
+-String petId;
+-String projectId;
+-String apiKey;
++String ingestUrl;   // https://<region>-<project>.cloudfunctions.net/ingestCollarData
++String deviceToken; // 64-hex secret registered by the app in deviceTokens/{deviceId}
+ 
+ String configBuffer;
+ bool provisionPending = false;
+ unsigned long lastPostMs = 0;
+-const unsigned long POST_INTERVAL_MS = 15000;
++const unsigned long POST_INTERVAL_MS = 30000;   // one upload every 30 s (proposal duty cycle)
+ 
+ void notifyStatus(const String &msg) {
+   Serial.println("[STATUS] " + msg);
+@@ -97,8 +111,8 @@ bool postCollarReading() {
+   if (WiFi.status() != WL_CONNECTED) {
+     if (!connectWifi()) return false;
+   }
+-  if (ownerUid.isEmpty() || projectId.isEmpty() || apiKey.isEmpty()) {
+-    notifyStatus("ERROR:missing_firebase_config");
++  if (ingestUrl.isEmpty() || deviceToken.length() != 64) {
++    notifyStatus("ERROR:missing_config");
+     return false;
+   }
+ 
+@@ -117,60 +131,51 @@ bool postCollarReading() {
+     return false;
+   }
+ 
+-  String url = "https://firestore.googleapis.com/v1/projects/" + projectId +
+-               "/databases/(default)/documents/users/" + ownerUid +
+-               "/collarData?key=" + apiKey;
+-
+-  DynamicJsonDocument doc(2048);
+-  JsonObject fields = doc.createNestedObject("fields");
+-
+-  auto setString = [&](const char *key, const String &val) {
+-    fields[key]["stringValue"] = val;
+-  };
+-  auto setInt = [&](const char *key, int val) {
+-    fields[key]["integerValue"] = String(val);
+-  };
+-  auto setDouble = [&](const char *key, double val) {
+-    fields[key]["doubleValue"] = val;
+-  };
+-
+-  setString("deviceId", deviceId);
+-  setString("deviceName", deviceId);
+-  setString("petId", petId);
++  StaticJsonDocument<768> doc;
++  doc["deviceId"] = deviceId;
+ 
+   time_t now = time(nullptr);
+-  char iso[40];
+   if (now > 100000) {
++    char iso[32];
+     strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
+-  } else {
+-    // NTP not ready — still send a parseable stamp; app will tolerate it
+-    snprintf(iso, sizeof(iso), "2026-01-01T00:00:00Z");
++    doc["timestamp"] = iso;   // server falls back to its own clock if this is missing or far off
+   }
+-  setString("timestamp", String(iso));
+ 
+-  setInt("heartRate", s.heartRate);
+-  setDouble("temperature", roundf(s.tempC * 100.0f) / 100.0f);
+-  if (s.spo2Valid) setDouble("bloodOxygen", roundf(s.spo2));
+-  if (s.stepsValid) setInt("steps", (int)s.steps);
++  doc["heartRate"] = s.heartRate;
++  doc["temperature"] = roundf(s.tempC * 100.0f) / 100.0f;
++  if (s.spo2Valid) doc["bloodOxygen"] = roundf(s.spo2);
++  if (s.stepsValid) doc["steps"] = (int)s.steps;
+   if (s.mpuOk) {
+     // Latest single accelerometer sample in g; the app computes x^2+y^2+z^2 from it
+-    setDouble("accelerometerX", roundf(s.ax * 1000.0f) / 1000.0f);
+-    setDouble("accelerometerY", roundf(s.ay * 1000.0f) / 1000.0f);
+-    setDouble("accelerometerZ", roundf(s.az * 1000.0f) / 1000.0f);
++    doc["accelerometerX"] = roundf(s.ax * 1000.0f) / 1000.0f;
++    doc["accelerometerY"] = roundf(s.ay * 1000.0f) / 1000.0f;
++    doc["accelerometerZ"] = roundf(s.az * 1000.0f) / 1000.0f;
++  }
++  if (s.batteryPct >= 0) doc["batteryLevel"] = s.batteryPct;
++
++  // Last good GPS position (not older than GPS_MAX_AGE_MS). Without a fix the app
++  // simply keeps showing the previous location.
++  if (haveFix && (millis() - lastFixMs) < GPS_MAX_AGE_MS) {
++    doc["latitude"] = lastLat;
++    doc["longitude"] = lastLng;
+   }
+-  if (s.batteryPct >= 0) setInt("batteryLevel", s.batteryPct);
+ 
+   String body;
+   serializeJson(doc, body);
+ 
++  // TLS: certificate is NOT verified here (setInsecure). The token is a bearer secret,
++  // so for anything beyond a pilot pin the Google root CA with client.setCACert(...).
++  WiFiClientSecure client;
++  client.setInsecure();
+   HTTPClient http;
+-  http.begin(url);
++  http.begin(client, ingestUrl);
+   http.addHeader("Content-Type", "application/json");
++  http.addHeader("X-Device-Token", deviceToken);
+   int code = http.POST(body);
+   String resp = http.getString();
+   http.end();
+ 
+-  Serial.printf("Firestore POST %d: %s\n", code, resp.c_str());
++  Serial.printf("Ingest POST %d: %s\n", code, resp.c_str());
+   if (code >= 200 && code < 300) {
+     notifyStatus("FIREBASE_OK");
+     return true;
+@@ -189,20 +194,16 @@ void applyConfigJson(const String &json) {
+ 
+   wifiSsid = doc["ssid"] | "";
+   wifiPass = doc["pass"] | "";
+-  ownerUid = doc["uid"] | "";
+-  petId = doc["petId"] | "";
+-  projectId = doc["projectId"] | "";
+-  apiKey = doc["apiKey"] | "";
++  ingestUrl = doc["url"] | "";
++  deviceToken = doc["token"] | "";
+   String incomingId = doc["deviceId"] | "";
+   if (incomingId.length() > 0) deviceId = incomingId;
+ 
+   prefs.begin("havapaw", false);
+   prefs.putString("ssid", wifiSsid);
+   prefs.putString("pass", wifiPass);
+-  prefs.putString("uid", ownerUid);
+-  prefs.putString("petId", petId);
+-  prefs.putString("projectId", projectId);
+-  prefs.putString("apiKey", apiKey);
++  prefs.putString("url", ingestUrl);
++  prefs.putString("token", deviceToken);
+   prefs.putString("deviceId", deviceId);
+   prefs.end();
+ 
+@@ -273,10 +274,8 @@ void loadSavedConfig() {
+   prefs.begin("havapaw", true);
+   wifiSsid = prefs.getString("ssid", "");
+   wifiPass = prefs.getString("pass", "");
+-  ownerUid = prefs.getString("uid", "");
+-  petId = prefs.getString("petId", "");
+-  projectId = prefs.getString("projectId", "");
+-  apiKey = prefs.getString("apiKey", "");
++  ingestUrl = prefs.getString("url", "");
++  deviceToken = prefs.getString("token", "");
+   deviceId = prefs.getString("deviceId", "");
+   prefs.end();
+   if (deviceId.isEmpty()) deviceId = makeDeviceId();
+@@ -285,7 +284,9 @@ void loadSavedConfig() {
+ void setup() {
+   Serial.begin(115200);
+   delay(500);
++  setCpuFrequencyMhz(80);   // enough for BLE + Wi-Fi + the 50 Hz sensor task; saves power
+   sensorsBegin();
++  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+   loadSavedConfig();
+   setupBle();
+   notifyStatus("READY");
+@@ -298,8 +299,29 @@ void setup() {
+   }
+ }
+ 
++void updateGps() {
++  while (gpsSerial.available() > 0) gps.encode(gpsSerial.read());
++  if (gps.location.isValid() && gps.location.isUpdated()) {
++    lastLat = gps.location.lat();
++    lastLng = gps.location.lng();
++    lastFixMs = millis();
++    haveFix = true;
++  }
++}
++
+ void loop() {
++  updateGps();
++
++  // Once paired and online, stop advertising to save power (power-cycle to re-pair).
++  if (!bleAdvertisingStopped && !deviceToken.isEmpty() && WiFi.status() == WL_CONNECTED &&
++      millis() > BLE_ADVERTISE_WINDOW_MS) {
++    BLEDevice::getAdvertising()->stop();
++    bleAdvertisingStopped = true;
++    Serial.println("BLE advertising stopped (provisioned)");
++  }
++
+   if (provisionPending) {
++    bleAdvertisingStopped = false;
+     provisionPending = false;
+     if (connectWifi()) {
+       // Try an immediate sync so the app can confirm FIREBASE_OK
+@@ -307,10 +329,10 @@ void loop() {
+     }
+   }
+ 
+-  if (WiFi.status() == WL_CONNECTED && !ownerUid.isEmpty() && millis() - lastPostMs > POST_INTERVAL_MS) {
++  if (WiFi.status() == WL_CONNECTED && !deviceToken.isEmpty() && millis() - lastPostMs > POST_INTERVAL_MS) {
+     lastPostMs = millis();
+     postCollarReading();
+   }
+ 
+-  delay(50);
++  delay(20);
+ }
+diff --git a/docs/ALERTS_AND_COLLAR_SETUP.md b/docs/ALERTS_AND_COLLAR_SETUP.md
+new file mode 100644
+index 0000000..d681bc7
+--- /dev/null
++++ b/docs/ALERTS_AND_COLLAR_SETUP.md
+@@ -0,0 +1,55 @@
++# Alerts, secure collar upload and consent: setup
++
++## 1. Deploy the backend (once, and after any change in `havapaw/functions` or `firestore.rules`)
++
++```bash
++cd havapaw/functions && npm install && npm test      # 8 tests should pass
++cd .. 
++firebase functions:secrets:set OPENAI_API_KEY         # only if not set already
++firebase deploy --only functions,firestore:rules
++```
++
++`ingestCollarData` is served at
++`https://us-central1-<project>.cloudfunctions.net/ingestCollarData`.
++If your functions are not in `us-central1`, edit `CollarConfig.ingestUrl` in
++`havapaw/lib/config/collar_config.dart`.
++
++The first deploy of a Firestore trigger can take a few minutes; the Cloud Functions logs
++(`firebase functions:log`) show `onCollarReading` runs.
++
++Firestore may ask for composite indexes the first time the geofence query runs
++(`petId` + `isActive`). Click the link in the log to create it.
++
++## 2. Collar
++
++1. Arduino libraries: ArduinoJson 6.x, SparkFun MAX3010x, Adafruit MPU6050, OneWire,
++   DallasTemperature, **TinyGPSPlus**.
++2. In `havapaw_sensors.h` set `BATTERY_ADC_PIN` (for example 34) and `BATTERY_DIVIDER_RATIO`
++   to match your voltage divider. Without this no battery level is sent and the low-battery
++   push cannot fire.
++3. Wire the NEO-6M: GPS TX -> GPIO16, GPS RX -> GPIO17, 3.3 V, GND.
++4. Flash `HavaPaw_Arduino/havapaw_collar.ino`, then pair the collar in the app
++   (Collar connection screen). Pairing registers the secret token and writes it to the collar.
++5. To pair again, power-cycle the collar (BLE advertising stops 2 minutes after boot once paired).
++
++## 3. Test checklist
++
++| What | How | Expected |
++|---|---|---|
++| Upload | Watch Serial Monitor | `Ingest POST 200` every ~30 s |
++| Rejected upload | Change the token in `curl` | HTTP 401 |
++| GPS | Take the collar outside | latitude/longitude appear in `collarData`; map moves |
++| Geofence | Make a 50 m zone, walk out with Walk mode OFF | push "left the safe zone" after 2 readings |
++| Walk mode | Same, Walk mode ON | no push |
++| Health alert | Lower a pet's weight/age in the profile or temporarily lower the limit in `rules.js`, or post a test reading | push after 2 abnormal readings, then at most one per 15 min |
++| Low battery | Battery under 15 % | one push, re-arms after 25 % |
++| Settings | Turn "Health alerts" off | no health push |
++| Consent | New account | consent screen before Home |
++
++Test reading with curl (replace values):
++
++```bash
++curl -X POST "$INGEST_URL" -H "Content-Type: application/json" \
++  -H "X-Device-Token: <64-hex token from Firestore deviceTokens/<deviceId>>" \
++  -d '{"deviceId":"HavaPaw-ESP32-ABCD","heartRate":170,"temperature":38.6,"steps":5,"batteryLevel":12}'
++```
+diff --git a/esp32/README.md b/esp32/README.md
+index de67c4b..6a77466 100644
+--- a/esp32/README.md
++++ b/esp32/README.md
+@@ -1,33 +1,13 @@
+-# HavaPaw ESP32 Collar
++# Collar firmware has moved
+ 
+-This firmware works with the Flutter **Connect Collar** screen.
++The sketch that used to live here posted **random demo values** and wrote to Firestore without
++authentication. It has been removed.
+ 
+-## What it does
++Use **`HavaPaw_Arduino/havapaw_collar.ino`** (with `havapaw_sensors.h`). It reads the real
++MAX30102, MPU6050, DS18B20 and NEO-6M GPS, is provisioned over BLE by the app, and uploads to the
++`ingestCollarData` Cloud Function with a per-device secret token.
+ 
+-1. **Bluetooth** – advertises as `HavaPaw-ESP32-XXXX` and accepts WiFi + account binding from the app  
+-2. **WiFi** – joins the 2.4 GHz network you enter in the app  
+-3. **Firestore** – posts sensor readings to `users/{uid}/collarData`
++`HavaPaw_Arduino/HavaPaw_Arduino.ino` is a separate bench sketch (deep sleep + Realtime Database).
++It is not used by the app.
+ 
+-## Setup (Arduino IDE)
+-
+-1. Install **ESP32** board support (Espressif)  
+-2. Install library **ArduinoJson** (Benoit Blanchon)  
+-3. Open `havapaw_collar.ino`  
+-4. Board: **ESP32 Dev Module** (or your board)  
+-5. Upload
+-
+-## App pairing
+-
+-1. Power the ESP32  
+-2. In HavaPaw: select a pet → **Connect Collar** → **Scan**  
+-3. Tap `HavaPaw-ESP32-…`  
+-4. Enter **2.4 GHz** WiFi SSID + password  
+-5. Wait for success – `pet.collarId` is saved automatically  
+-
+-## Firestore rules
+-
+-Unauthenticated REST writes from the ESP32 are blocked by default Firebase rules. For demos you can temporarily allow writes to `collarData`, or harden later with a Cloud Function / device token.
+-
+-## Sensors
+-
+-The sketch posts demo heart rate / temperature / steps / battery. Replace those with your real sensors (MAX30102, MPU6050, GPS, etc.) in `postCollarReading()`.
++Firestore rules now live in `havapaw/firestore.rules`.
+diff --git a/esp32/firestore.rules.snippet b/esp32/firestore.rules.snippet
+deleted file mode 100644
+index 1f17e28..0000000
+--- a/esp32/firestore.rules.snippet
++++ /dev/null
+@@ -1,16 +0,0 @@
+-rules_version = '2';
+-service cloud.firestore {
+-  match /databases/{database}/documents {
+-    // Keep your existing authenticated user rules for pets, etc.
+-    match /users/{userId}/{document=**} {
+-      allow read, write: if request.auth != null && request.auth.uid == userId;
+-    }
+-
+-    // TEMP (demo): allow ESP32 REST writes into collarData without Firebase Auth.
+-    // Remove or tighten before any real production use.
+-    match /users/{userId}/collarData/{docId} {
+-      allow create: if true;
+-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+-    }
+-  }
+-}
+diff --git a/esp32/havapaw_collar/havapaw_collar.ino b/esp32/havapaw_collar/havapaw_collar.ino
+deleted file mode 100644
+index cd97fe2..0000000
+--- a/esp32/havapaw_collar/havapaw_collar.ino
++++ /dev/null
+@@ -1,299 +0,0 @@
+-/*
+- * HavaPaw ESP32 Smart Collar firmware
+- *
+- * Flow:
+- *  1) Advertises as HavaPaw-ESP32-XXXX over BLE
+- *  2) App writes JSON config to the Config characteristic
+- *  3) ESP32 joins WiFi and posts readings to Firestore REST
+- *
+- * Arduino IDE boards: ESP32 Dev Module
+- * Libraries: ArduinoJson by Benoit Blanchon
+- *
+- * Firestore path written:
+- *   users/{uid}/collarData/{autoId}
+- *
+- * Required Firestore rule example (school / demo — tighten for production):
+- *   match /users/{userId}/collarData/{docId} {
+- *     allow read, write: if request.auth != null && request.auth.uid == userId
+- *                        || true; // temporarily allow device writes without auth
+- *   }
+- *
+- * Better long-term: Cloud Function endpoint or Firebase Auth anonymous token.
+- */
+-
+-#include <BLEDevice.h>
+-#include <BLEServer.h>
+-#include <BLEUtils.h>
+-#include <BLE2902.h>
+-#include <WiFi.h>
+-#include <HTTPClient.h>
+-#include <ArduinoJson.h>
+-#include <Preferences.h>
+-
+-// Must match havapaw/lib/services/collar_ble_protocol.dart
+-#define SERVICE_UUID        "7b1e0001-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
+-#define CONFIG_CHAR_UUID    "7b1e0002-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
+-#define STATUS_CHAR_UUID    "7b1e0003-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
+-#define DEVICE_ID_CHAR_UUID "7b1e0004-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
+-
+-Preferences prefs;
+-BLECharacteristic *statusChar = nullptr;
+-BLECharacteristic *deviceIdChar = nullptr;
+-
+-String deviceId;
+-String wifiSsid;
+-String wifiPass;
+-String ownerUid;
+-String petId;
+-String projectId;
+-String apiKey;
+-
+-String configBuffer;
+-bool provisionPending = false;
+-unsigned long lastPostMs = 0;
+-const unsigned long POST_INTERVAL_MS = 15000;
+-
+-void notifyStatus(const String &msg) {
+-  Serial.println("[STATUS] " + msg);
+-  if (statusChar) {
+-    statusChar->setValue(msg.c_str());
+-    statusChar->notify();
+-  }
+-}
+-
+-String makeDeviceId() {
+-  uint64_t mac = ESP.getEfuseMac();
+-  char buf[24];
+-  snprintf(buf, sizeof(buf), "HavaPaw-ESP32-%04X", (uint16_t)(mac & 0xFFFF));
+-  return String(buf);
+-}
+-
+-bool connectWifi() {
+-  if (wifiSsid.isEmpty()) return false;
+-  WiFi.mode(WIFI_STA);
+-  WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
+-  Serial.printf("Connecting WiFi SSID=%s\n", wifiSsid.c_str());
+-  unsigned long start = millis();
+-  while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
+-    delay(250);
+-    Serial.print(".");
+-  }
+-  Serial.println();
+-  if (WiFi.status() == WL_CONNECTED) {
+-    Serial.println(WiFi.localIP());
+-    notifyStatus("WIFI_OK");
+-    return true;
+-  }
+-  notifyStatus("WIFI_FAIL");
+-  return false;
+-}
+-
+-bool postCollarReading() {
+-  if (WiFi.status() != WL_CONNECTED) {
+-    if (!connectWifi()) return false;
+-  }
+-  if (ownerUid.isEmpty() || projectId.isEmpty() || apiKey.isEmpty()) {
+-    notifyStatus("ERROR:missing_firebase_config");
+-    return false;
+-  }
+-
+-  // Wait briefly for NTP after WiFi so timestamps are valid ISO-8601
+-  for (int i = 0; i < 20 && time(nullptr) < 100000; i++) {
+-    delay(250);
+-  }
+-
+-  // Demo sensor values — replace with real sensor reads (MAX30102, MPU6050, GPS, etc.)
+-  int heartRate = 70 + (int)(esp_random() % 20);
+-  float temperature = 38.0 + ((esp_random() % 20) / 10.0);
+-  int steps = (int)(esp_random() % 50);
+-  int battery = 80;
+-
+-  String url = "https://firestore.googleapis.com/v1/projects/" + projectId +
+-               "/databases/(default)/documents/users/" + ownerUid +
+-               "/collarData?key=" + apiKey;
+-
+-  StaticJsonDocument<768> doc;
+-  JsonObject fields = doc.createNestedObject("fields");
+-
+-  auto setString = [&](const char *key, const String &val) {
+-    fields[key]["stringValue"] = val;
+-  };
+-  auto setInt = [&](const char *key, int val) {
+-    fields[key]["integerValue"] = String(val);
+-  };
+-  auto setDouble = [&](const char *key, double val) {
+-    fields[key]["doubleValue"] = val;
+-  };
+-
+-  setString("deviceId", deviceId);
+-  setString("deviceName", deviceId);
+-  setString("petId", petId);
+-
+-  time_t now = time(nullptr);
+-  char iso[40];
+-  if (now > 100000) {
+-    strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
+-  } else {
+-    // NTP not ready — still send a parseable stamp; app will tolerate it
+-    snprintf(iso, sizeof(iso), "2026-01-01T00:00:00Z");
+-  }
+-  setString("timestamp", String(iso));
+-
+-  setInt("heartRate", heartRate);
+-  setDouble("temperature", temperature);
+-  setInt("steps", steps);
+-  setInt("batteryLevel", battery);
+-
+-  String body;
+-  serializeJson(doc, body);
+-
+-  HTTPClient http;
+-  http.begin(url);
+-  http.addHeader("Content-Type", "application/json");
+-  int code = http.POST(body);
+-  String resp = http.getString();
+-  http.end();
+-
+-  Serial.printf("Firestore POST %d: %s\n", code, resp.c_str());
+-  if (code >= 200 && code < 300) {
+-    notifyStatus("FIREBASE_OK");
+-    return true;
+-  }
+-  notifyStatus("FIREBASE_FAIL");
+-  return false;
+-}
+-
+-void applyConfigJson(const String &json) {
+-  StaticJsonDocument<768> doc;
+-  DeserializationError err = deserializeJson(doc, json);
+-  if (err) {
+-    notifyStatus("ERROR:bad_json");
+-    return;
+-  }
+-
+-  wifiSsid = doc["ssid"] | "";
+-  wifiPass = doc["pass"] | "";
+-  ownerUid = doc["uid"] | "";
+-  petId = doc["petId"] | "";
+-  projectId = doc["projectId"] | "";
+-  apiKey = doc["apiKey"] | "";
+-  String incomingId = doc["deviceId"] | "";
+-  if (incomingId.length() > 0) deviceId = incomingId;
+-
+-  prefs.begin("havapaw", false);
+-  prefs.putString("ssid", wifiSsid);
+-  prefs.putString("pass", wifiPass);
+-  prefs.putString("uid", ownerUid);
+-  prefs.putString("petId", petId);
+-  prefs.putString("projectId", projectId);
+-  prefs.putString("apiKey", apiKey);
+-  prefs.putString("deviceId", deviceId);
+-  prefs.end();
+-
+-  if (deviceIdChar) deviceIdChar->setValue(deviceId.c_str());
+-
+-  provisionPending = true;
+-}
+-
+-class ConfigCallbacks : public BLECharacteristicCallbacks {
+-  void onWrite(BLECharacteristic *characteristic) override {
+-    String value = characteristic->getValue();
+-    if (value.length() == 0) return;
+-    configBuffer += value;
+-    // Complete JSON object received
+-    if (configBuffer.indexOf('{') >= 0 && configBuffer.lastIndexOf('}') > configBuffer.indexOf('{')) {
+-      String json = configBuffer.substring(configBuffer.indexOf('{'), configBuffer.lastIndexOf('}') + 1);
+-      configBuffer = "";
+-      applyConfigJson(json);
+-    }
+-  }
+-};
+-
+-class ServerCallbacks : public BLEServerCallbacks {
+-  void onConnect(BLEServer *server) override {
+-    Serial.println("BLE client connected");
+-  }
+-  void onDisconnect(BLEServer *server) override {
+-    Serial.println("BLE client disconnected — restart advertising");
+-    delay(100);
+-    server->startAdvertising();
+-  }
+-};
+-
+-void setupBle() {
+-  BLEDevice::init(deviceId.c_str());
+-  BLEServer *server = BLEDevice::createServer();
+-  server->setCallbacks(new ServerCallbacks());
+-
+-  BLEService *service = server->createService(SERVICE_UUID);
+-
+-  BLECharacteristic *configChar = service->createCharacteristic(
+-      CONFIG_CHAR_UUID,
+-      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+-  configChar->setCallbacks(new ConfigCallbacks());
+-
+-  statusChar = service->createCharacteristic(
+-      STATUS_CHAR_UUID,
+-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+-  statusChar->addDescriptor(new BLE2902());
+-  statusChar->setValue("READY");
+-
+-  deviceIdChar = service->createCharacteristic(
+-      DEVICE_ID_CHAR_UUID,
+-      BLECharacteristic::PROPERTY_READ);
+-  deviceIdChar->setValue(deviceId.c_str());
+-
+-  service->start();
+-
+-  BLEAdvertising *advertising = BLEDevice::getAdvertising();
+-  advertising->addServiceUUID(SERVICE_UUID);
+-  advertising->setScanResponse(true);
+-  advertising->setMinPreferred(0x06);
+-  BLEDevice::startAdvertising();
+-  Serial.println("BLE advertising as " + deviceId);
+-}
+-
+-void loadSavedConfig() {
+-  prefs.begin("havapaw", true);
+-  wifiSsid = prefs.getString("ssid", "");
+-  wifiPass = prefs.getString("pass", "");
+-  ownerUid = prefs.getString("uid", "");
+-  petId = prefs.getString("petId", "");
+-  projectId = prefs.getString("projectId", "");
+-  apiKey = prefs.getString("apiKey", "");
+-  deviceId = prefs.getString("deviceId", "");
+-  prefs.end();
+-  if (deviceId.isEmpty()) deviceId = makeDeviceId();
+-}
+-
+-void setup() {
+-  Serial.begin(115200);
+-  delay(500);
+-  loadSavedConfig();
+-  setupBle();
+-  notifyStatus("READY");
+-
+-  // Optional: enable NTP for proper timestamps after WiFi connects
+-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+-
+-  if (!wifiSsid.isEmpty()) {
+-    connectWifi();
+-  }
+-}
+-
+-void loop() {
+-  if (provisionPending) {
+-    provisionPending = false;
+-    if (connectWifi()) {
+-      // Try an immediate sync so the app can confirm FIREBASE_OK
+-      postCollarReading();
+-    }
+-  }
+-
+-  if (WiFi.status() == WL_CONNECTED && !ownerUid.isEmpty() && millis() - lastPostMs > POST_INTERVAL_MS) {
+-    lastPostMs = millis();
+-    postCollarReading();
+-  }
+-
+-  delay(50);
+-}
+diff --git a/havapaw/firebase.json b/havapaw/firebase.json
+index a952071..6f95158 100644
+--- a/havapaw/firebase.json
++++ b/havapaw/firebase.json
+@@ -1 +1,31 @@
+-{"flutter":{"platforms":{"android":{"default":{"projectId":"havapaw-11e23","appId":"1:90532665779:android:dd26becfdb80946b8013c6","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"havapaw-11e23","configurations":{"android":"1:90532665779:android:dd26becfdb80946b8013c6","ios":"1:90532665779:ios:6843099e654f5f648013c6","macos":"1:90532665779:ios:6843099e654f5f648013c6","web":"1:90532665779:web:57fb8951b6118e058013c6","windows":"1:90532665779:web:5df5c2ca7906d7448013c6"}}}}}}
+\ No newline at end of file
++{
++  "flutter": {
++    "platforms": {
++      "android": {
++        "default": {
++          "projectId": "havapaw-11e23",
++          "appId": "1:90532665779:android:dd26becfdb80946b8013c6",
++          "fileOutput": "android/app/google-services.json"
++        }
++      },
++      "dart": {
++        "lib/firebase_options.dart": {
++          "projectId": "havapaw-11e23",
++          "configurations": {
++            "android": "1:90532665779:android:dd26becfdb80946b8013c6",
++            "ios": "1:90532665779:ios:6843099e654f5f648013c6",
++            "macos": "1:90532665779:ios:6843099e654f5f648013c6",
++            "web": "1:90532665779:web:57fb8951b6118e058013c6",
++            "windows": "1:90532665779:web:5df5c2ca7906d7448013c6"
++          }
++        }
++      }
++    }
++  },
++  "firestore": {
++    "rules": "firestore.rules"
++  },
++  "functions": {
++    "source": "functions"
++  }
++}
+diff --git a/havapaw/firestore.rules b/havapaw/firestore.rules
+new file mode 100644
+index 0000000..525d21c
+--- /dev/null
++++ b/havapaw/firestore.rules
+@@ -0,0 +1,32 @@
++rules_version = '2';
++service cloud.firestore {
++  match /databases/{database}/documents {
++
++    // Each signed-in user can read and write only their own data
++    // (pets, geofences, collarData seed documents, fcmTokens, alerts, settings).
++    match /users/{userId}/{document=**} {
++      allow read, write: if request.auth != null && request.auth.uid == userId;
++    }
++
++    // Collar readings are written by the ingestCollarData Cloud Function (admin SDK),
++    // so the old unauthenticated "allow create: if true" rule is removed.
++
++    // Per-device secret used by the collar to authenticate to ingestCollarData.
++    // The app creates it during BLE provisioning; the token can never be read back
++    // by a client, only by the Cloud Function.
++    match /deviceTokens/{deviceId} {
++      allow create: if request.auth != null
++        && request.resource.data.uid == request.auth.uid
++        && request.resource.data.keys().hasOnly(['uid', 'petId', 'token', 'createdAt'])
++        && request.resource.data.token is string
++        && request.resource.data.token.size() == 64;
++      allow update: if request.auth != null
++        && resource.data.uid == request.auth.uid
++        && request.resource.data.uid == request.auth.uid
++        && request.resource.data.token is string
++        && request.resource.data.token.size() == 64;
++      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
++      allow read: if false;
++    }
++  }
++}
+diff --git a/havapaw/functions/index.js b/havapaw/functions/index.js
+index 90292c0..0c622dc 100644
+--- a/havapaw/functions/index.js
++++ b/havapaw/functions/index.js
+@@ -106,3 +106,239 @@ ${trimmedQuestion
+     }
+   }
+ );
++
++/* ==========================================================================
++ * Collar ingestion + alert push notifications
++ *
++ *  1. ingestCollarData  - HTTPS endpoint the ESP32 collar posts readings to.
++ *     The collar holds a per-device secret token (generated by the app during
++ *     BLE provisioning and stored in /deviceTokens/{deviceId}). The server,
++ *     not the collar, decides which user and pet a reading belongs to, so the
++ *     Firestore rules no longer need an unauthenticated write.
++ *
++ *  2. onCollarReading   - Firestore trigger that applies the alert rules
++ *     (health, geofence, low battery) and sends FCM push notifications.
++ * ======================================================================== */
++const crypto = require("crypto");
++const admin = require("firebase-admin");
++const { onRequest } = require("firebase-functions/v2/https");
++const { onDocumentCreated } = require("firebase-functions/v2/firestore");
++const rules = require("./lib/rules");
++
++if (!admin.apps.length) admin.initializeApp();
++const db = admin.firestore();
++
++const MIN_INGEST_INTERVAL_MS = 4000;
++const HEALTH_COOLDOWN_MS = 15 * 60 * 1000;
++const GEOFENCE_COOLDOWN_MS = 5 * 60 * 1000;
++const CONSECUTIVE_READINGS_REQUIRED = 2; // ignore one-off sensor spikes
++
++function safeEqual(a, b) {
++  const ba = Buffer.from(String(a));
++  const bb = Buffer.from(String(b));
++  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
++}
++
++exports.ingestCollarData = onRequest(
++  { cors: false, maxInstances: 20, invoker: "public" },
++  async (req, res) => {
++    if (req.method !== "POST") {
++      res.status(405).json({ error: "method_not_allowed" });
++      return;
++    }
++    const body = req.body && typeof req.body === "object" ? req.body : {};
++    const token = req.get("X-Device-Token") || "";
++    const deviceId = typeof body.deviceId === "string" ? body.deviceId : "";
++    if (!deviceId || deviceId.length > 64 || token.length !== 64) {
++      res.status(400).json({ error: "bad_request" });
++      return;
++    }
++
++    const regRef = db.collection("deviceTokens").doc(deviceId);
++    const reg = await regRef.get();
++    if (!reg.exists || !safeEqual(reg.get("token") || "", token)) {
++      res.status(401).json({ error: "unauthorized" });
++      return;
++    }
++    const uid = reg.get("uid");
++    const petId = reg.get("petId");
++    if (!uid || !petId) {
++      res.status(401).json({ error: "unbound_device" });
++      return;
++    }
++
++    const now = Date.now();
++    if (now - (reg.get("lastIngestMs") || 0) < MIN_INGEST_INTERVAL_MS) {
++      res.status(429).json({ error: "too_many_requests" });
++      return;
++    }
++
++    const parsed = rules.sanitizeReading(body);
++    if (!parsed.ok) {
++      res.status(400).json({ error: parsed.error });
++      return;
++    }
++
++    // Trust the device clock only if it is close to the server clock.
++    let timestamp = new Date(now).toISOString();
++    if (typeof body.timestamp === "string") {
++      const t = Date.parse(body.timestamp);
++      if (!Number.isNaN(t) && Math.abs(t - now) < 10 * 60 * 1000) timestamp = new Date(t).toISOString();
++    }
++
++    await Promise.all([
++      db.collection("users").doc(uid).collection("collarData").add({
++        ...parsed.value,
++        deviceId,
++        deviceName: deviceId,
++        petId,
++        timestamp,
++      }),
++      regRef.set({ lastIngestMs: now }, { merge: true }),
++    ]);
++    res.status(200).json({ ok: true });
++  }
++);
++
++async function sendPush(uid, petId, alert) {
++  const tokensSnap = await db.collection("users").doc(uid).collection("fcmTokens").get();
++  const tokens = tokensSnap.docs.map((d) => d.id);
++  await db.collection("users").doc(uid).collection("alerts").add({
++    petId,
++    type: alert.type,
++    severity: alert.severity,
++    title: alert.title,
++    body: alert.body,
++    createdAt: admin.firestore.FieldValue.serverTimestamp(),
++  });
++  if (tokens.length === 0) return;
++  const result = await admin.messaging().sendEachForMulticast({
++    tokens,
++    notification: { title: alert.title, body: alert.body },
++    data: { type: alert.type, petId: String(petId) },
++    android: {
++      priority: "high",
++      notification: { channelId: "havapaw_channel" },
++    },
++    apns: { payload: { aps: { sound: "default" } } },
++  });
++  const dead = [];
++  result.responses.forEach((r, i) => {
++    const code = r.error && r.error.code;
++    if (
++      code === "messaging/registration-token-not-registered" ||
++      code === "messaging/invalid-registration-token"
++    ) {
++      dead.push(tokens[i]);
++    }
++  });
++  await Promise.all(
++    dead.map((t) => db.collection("users").doc(uid).collection("fcmTokens").doc(t).delete())
++  );
++}
++
++exports.onCollarReading = onDocumentCreated(
++  { document: "users/{uid}/collarData/{docId}", maxInstances: 20 },
++  async (event) => {
++    const snap = event.data;
++    if (!snap) return;
++    const reading = snap.data();
++    const uid = event.params.uid;
++    const petId = reading.petId;
++    if (!petId) return;
++
++    const userRef = db.collection("users").doc(uid);
++    const stateRef = userRef.collection("alertState").doc(petId);
++    const [petDoc, userDoc, zonesSnap, stateDoc] = await Promise.all([
++      userRef.collection("pets").doc(petId).get(),
++      userRef.get(),
++      userRef.collection("geofences").where("petId", "==", petId).where("isActive", "==", true).get(),
++      stateRef.get(),
++    ]);
++    if (!petDoc.exists) return;
++
++    const pet = petDoc.data();
++    const prefs = (userDoc.exists && userDoc.get("alertPrefs")) || {};
++    if (prefs.push === false) return;
++    const onWalk = userDoc.exists && userDoc.get("onWalk") === true;
++    const zones = zonesSnap.docs.map((d) => d.data());
++
++    const state = stateDoc.exists ? stateDoc.data() : {};
++    const counts = { ...(state.counts || {}) };
++    const lastSent = { ...(state.lastSent || {}) };
++    let lowBattery = state.lowBattery === true;
++    let outside = state.outside === true;
++    const now = Date.now();
++    const toSend = [];
++
++    // ---- health (one alert per reading, only after consecutive abnormal readings)
++    const hasVitals = typeof reading.heartRate === "number" || typeof reading.temperature === "number";
++    if (hasVitals) {
++      const top = rules.topHealthAlert(reading, pet);
++      for (const t of ["highHeartRate", "stressWarning", "highTemperature"]) {
++        counts[t] = top && top.type === t ? (counts[t] || 0) + 1 : 0;
++      }
++      if (
++        top &&
++        prefs.health !== false &&
++        counts[top.type] >= CONSECUTIVE_READINGS_REQUIRED &&
++        now - (lastSent[top.type] || 0) > HEALTH_COOLDOWN_MS
++      ) {
++        toSend.push(top);
++        lastSent[top.type] = now;
++      }
++    }
++
++    // ---- low battery (once per discharge cycle)
++    if (typeof reading.batteryLevel === "number") {
++      if (reading.batteryLevel < rules.LOW_BATTERY_PCT && !lowBattery) {
++        lowBattery = true;
++        if (prefs.battery !== false) {
++          toSend.push({
++            type: "lowBattery",
++            severity: 0.5,
++            title: `${pet.name || "Collar"}: battery low`,
++            body: `Collar battery is at ${reading.batteryLevel}%. Charge it soon so tracking keeps working.`,
++          });
++        }
++      } else if (reading.batteryLevel >= rules.BATTERY_RECOVER_PCT) {
++        lowBattery = false;
++      }
++    }
++
++    // ---- geofence (on exit; suppressed while the owner has Walk mode on)
++    const out = rules.isOutsideAllZones(reading, zones);
++    if (out === true) {
++      counts.outside = (counts.outside || 0) + 1;
++      if (
++        !outside &&
++        !onWalk &&
++        counts.outside >= CONSECUTIVE_READINGS_REQUIRED &&
++        now - (lastSent.geofence || 0) > GEOFENCE_COOLDOWN_MS
++      ) {
++        outside = true;
++        lastSent.geofence = now;
++        if (prefs.geofence !== false) {
++          toSend.push({
++            type: "geofenceExit",
++            severity: 0.8,
++            title: `${pet.name || "Your pet"} left the safe zone`,
++            body: `${pet.name || "Your pet"} is outside the safe zone. Open the map to see where.`,
++          });
++        }
++      }
++    } else if (out === false) {
++      counts.outside = 0;
++      outside = false;
++    }
++
++    await stateRef.set({ counts, lastSent, lowBattery, outside, updatedAt: now }, { merge: true });
++    for (const alert of toSend) {
++      try {
++        await sendPush(uid, petId, alert);
++      } catch (e) {
++        logger.error("sendPush failed", e);
++      }
++    }
++  }
++);
+diff --git a/havapaw/functions/lib/rules.js b/havapaw/functions/lib/rules.js
+new file mode 100644
+index 0000000..397f161
+--- /dev/null
++++ b/havapaw/functions/lib/rules.js
+@@ -0,0 +1,160 @@
++"use strict";
++/**
++ * Pure alert rules used by the Cloud Functions.
++ *
++ * These mirror the thresholds in the Flutter app
++ * (lib/services/health_intelligence_service.dart) so that a push notification
++ * and the in-app health screen agree. No Firebase imports here so the logic
++ * can be unit tested with `node --test`.
++ */
++
++const DOG_MAX_HR = 140;
++const CAT_MAX_HR = 220;
++const BASE_TEMP_LIMIT = 39.5;
++const LOW_BATTERY_PCT = 15;
++const BATTERY_RECOVER_PCT = 25;
++
++const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
++
++function petAgeYears(birthday, now = new Date()) {
++  const d = new Date(birthday);
++  if (Number.isNaN(d.getTime())) return 0;
++  let age = now.getUTCFullYear() - d.getUTCFullYear();
++  const m = now.getUTCMonth() - d.getUTCMonth();
++  if (m < 0 || (m === 0 && now.getUTCDate() < d.getUTCDate())) age--;
++  return age;
++}
++
++function heartRateThreshold(pet, now = new Date()) {
++  const type = String(pet.type || "dog").toLowerCase();
++  const age = petAgeYears(pet.birthday, now);
++  const weight = Number(pet.weight) || 0;
++  let max = type === "cat" ? CAT_MAX_HR : DOG_MAX_HR;
++  if (age > 8) max -= 10;
++  else if (age < 2) max += 10;
++  if (weight > 30) max -= 5;
++  return clamp(max, 60, 220);
++}
++
++function temperatureThreshold(pet, now = new Date()) {
++  const type = String(pet.type || "dog").toLowerCase();
++  const age = petAgeYears(pet.birthday, now);
++  let t = BASE_TEMP_LIMIT;
++  if (age > 10) t -= 0.3;
++  if (type === "cat") t += 0.5;
++  return clamp(t, 38.0, 41.0);
++}
++
++function distanceMeters(lat1, lon1, lat2, lon2) {
++  const R = 6371000;
++  const rad = (x) => (x * Math.PI) / 180;
++  const dLat = rad(lat2 - lat1);
++  const dLon = rad(lon2 - lon1);
++  const a =
++    Math.sin(dLat / 2) ** 2 +
++    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
++  return 2 * R * Math.asin(Math.sqrt(a));
++}
++
++const isNum = (v) => typeof v === "number" && Number.isFinite(v);
++
++/**
++ * Health alerts for a single reading. Same conditions as the app:
++ * high heart rate, stress (high HR with fewer than 100 steps), high temperature.
++ */
++function healthAlerts(reading, pet, now = new Date()) {
++  const out = [];
++  const maxHr = heartRateThreshold(pet, now);
++  const maxTemp = temperatureThreshold(pet, now);
++  const name = pet.name || "Your pet";
++
++  if (isNum(reading.heartRate) && reading.heartRate > maxHr) {
++    const severe = reading.heartRate > maxHr + 20;
++    out.push({
++      type: "highHeartRate",
++      severity: severe ? 0.9 : 0.6,
++      title: `${name}: high heart rate`,
++      body: `Heart rate is ${Math.round(reading.heartRate)} bpm (limit for ${name} is ${Math.round(maxHr)}). Keep an eye on ${name}.`,
++    });
++    if (isNum(reading.steps) && reading.steps < 100) {
++      out.push({
++        type: "stressWarning",
++        severity: 0.7,
++        title: `${name} may be stressed`,
++        body: `High heart rate (${Math.round(reading.heartRate)} bpm) while ${name} is barely moving. Check on ${name}.`,
++      });
++    }
++  }
++  if (isNum(reading.temperature) && reading.temperature > maxTemp) {
++    const severe = reading.temperature > maxTemp + 1.0;
++    out.push({
++      type: "highTemperature",
++      severity: severe ? 0.9 : 0.6,
++      title: `${name}: high temperature`,
++      body: `Temperature reads ${reading.temperature.toFixed(1)} \u00b0C (limit ${maxTemp.toFixed(1)} \u00b0C). Consider contacting a vet if it stays high.`,
++    });
++  }
++  return out;
++}
++
++/** The single most severe health alert, or null. Avoids two pushes for one reading. */
++function topHealthAlert(reading, pet, now = new Date()) {
++  const all = healthAlerts(reading, pet, now);
++  if (all.length === 0) return null;
++  return all.reduce((a, b) => (b.severity > a.severity ? b : a));
++}
++
++/** True when the reading has a position outside every active zone. null if unknown. */
++function isOutsideAllZones(reading, zones) {
++  if (!isNum(reading.latitude) || !isNum(reading.longitude)) return null;
++  if (!zones || zones.length === 0) return null;
++  return zones.every(
++    (z) => distanceMeters(reading.latitude, reading.longitude, z.latitude, z.longitude) > z.radius
++  );
++}
++
++/**
++ * Validates and cleans a reading sent by the collar. Unknown fields are dropped.
++ * Returns { ok: true, value } or { ok: false, error }.
++ */
++function sanitizeReading(body) {
++  const num = (key, lo, hi, int = false) => {
++    if (body[key] === undefined || body[key] === null) return undefined;
++    const v = Number(body[key]);
++    if (!Number.isFinite(v) || v < lo || v > hi) throw new Error(`${key}_out_of_range`);
++    return int ? Math.round(v) : v;
++  };
++  try {
++    const clean = {
++      heartRate: num("heartRate", 20, 300, true),
++      temperature: num("temperature", 20, 45),
++      bloodOxygen: num("bloodOxygen", 50, 100),
++      steps: num("steps", 0, 100000, true),
++      batteryLevel: num("batteryLevel", 0, 100, true),
++      latitude: num("latitude", -90, 90),
++      longitude: num("longitude", -180, 180),
++      accelerometerX: num("accelerometerX", -20, 20),
++      accelerometerY: num("accelerometerY", -20, 20),
++      accelerometerZ: num("accelerometerZ", -20, 20),
++    };
++    const value = {};
++    for (const [k, v] of Object.entries(clean)) if (v !== undefined) value[k] = v;
++    if (Object.keys(value).length === 0) return { ok: false, error: "empty_reading" };
++    return { ok: true, value };
++  } catch (e) {
++    return { ok: false, error: e.message };
++  }
++}
++
++module.exports = {
++  LOW_BATTERY_PCT,
++  BATTERY_RECOVER_PCT,
++  petAgeYears,
++  heartRateThreshold,
++  temperatureThreshold,
++  distanceMeters,
++  healthAlerts,
++  topHealthAlert,
++  isOutsideAllZones,
++  sanitizeReading,
++};
+diff --git a/havapaw/functions/package.json b/havapaw/functions/package.json
+index ea8c8a0..60a0eaf 100644
+--- a/havapaw/functions/package.json
++++ b/havapaw/functions/package.json
+@@ -10,5 +10,8 @@
+     "firebase-functions": "^6.0.1",
+     "openai": "^4.67.3"
+   },
+-  "private": true
++  "private": true,
++  "scripts": {
++    "test": "node --test test/rules.test.js"
++  }
+ }
+diff --git a/havapaw/functions/test/rules.test.js b/havapaw/functions/test/rules.test.js
+new file mode 100644
+index 0000000..5f30563
+--- /dev/null
++++ b/havapaw/functions/test/rules.test.js
+@@ -0,0 +1,64 @@
++"use strict";
++const test = require("node:test");
++const assert = require("node:assert");
++const r = require("../lib/rules");
++
++const NOW = new Date("2026-10-20T00:00:00Z");
++const dog = (o = {}) => ({ name: "Hava", type: "dog", birthday: "2022-01-01", weight: 20, ...o });
++
++test("heart rate threshold: adult dog, young, senior, heavy, cat, clamp", () => {
++  assert.strictEqual(r.heartRateThreshold(dog(), NOW), 140);
++  assert.strictEqual(r.heartRateThreshold(dog({ birthday: "2025-06-01" }), NOW), 150);
++  assert.strictEqual(r.heartRateThreshold(dog({ birthday: "2015-01-01" }), NOW), 130);
++  assert.strictEqual(r.heartRateThreshold(dog({ weight: 35 }), NOW), 135);
++  assert.strictEqual(r.heartRateThreshold({ type: "cat", birthday: "2022-01-01", weight: 4 }, NOW), 220);
++});
++
++test("temperature threshold: cat +0.5, senior -0.3, clamped to 38..41", () => {
++  assert.strictEqual(r.temperatureThreshold(dog(), NOW), 39.5);
++  assert.ok(Math.abs(r.temperatureThreshold({ type: "cat", birthday: "2022-01-01" }, NOW) - 40.0) < 1e-9);
++  assert.ok(Math.abs(r.temperatureThreshold(dog({ birthday: "2010-01-01" }), NOW) - 39.2) < 1e-9);
++});
++
++test("healthAlerts: normal reading raises nothing", () => {
++  assert.deepStrictEqual(r.healthAlerts({ heartRate: 90, temperature: 38.5, steps: 300 }, dog(), NOW), []);
++});
++
++test("healthAlerts: high HR with low steps gives HR and stress; top is the more severe", () => {
++  const all = r.healthAlerts({ heartRate: 150, temperature: 38.5, steps: 10 }, dog(), NOW);
++  assert.deepStrictEqual(all.map((a) => a.type).sort(), ["highHeartRate", "stressWarning"]);
++  assert.strictEqual(r.topHealthAlert({ heartRate: 150, steps: 10 }, dog(), NOW).type, "stressWarning");
++  assert.strictEqual(r.topHealthAlert({ heartRate: 170, steps: 10 }, dog(), NOW).type, "highHeartRate");
++});
++
++test("healthAlerts: temperature severity steps up above limit + 1", () => {
++  assert.strictEqual(r.topHealthAlert({ temperature: 40.0 }, dog(), NOW).severity, 0.6);
++  assert.strictEqual(r.topHealthAlert({ temperature: 40.8 }, dog(), NOW).severity, 0.9);
++});
++
++test("healthAlerts ignores missing values", () => {
++  assert.deepStrictEqual(r.healthAlerts({ heartRate: null, temperature: undefined }, dog(), NOW), []);
++});
++
++test("distance and geofence", () => {
++  const d = r.distanceMeters(3.0, 101.0, 3.001, 101.0);
++  assert.ok(d > 105 && d < 117, `got ${d}`);
++  const zones = [{ latitude: 3.0, longitude: 101.0, radius: 50 }];
++  assert.strictEqual(r.isOutsideAllZones({ latitude: 3.0001, longitude: 101.0 }, zones), false);
++  assert.strictEqual(r.isOutsideAllZones({ latitude: 3.001, longitude: 101.0 }, zones), true);
++  assert.strictEqual(r.isOutsideAllZones({ latitude: 3.001, longitude: 101.0 }, []), null);
++  assert.strictEqual(r.isOutsideAllZones({}, zones), null);
++  assert.strictEqual(
++    r.isOutsideAllZones({ latitude: 3.001, longitude: 101.0 }, [...zones, { latitude: 3.001, longitude: 101.0, radius: 20 }]),
++    false
++  );
++});
++
++test("sanitizeReading keeps known fields, rounds ints, rejects bad ranges", () => {
++  const ok = r.sanitizeReading({ heartRate: 88.6, temperature: 38.4, junk: "x", latitude: 3.1, longitude: 101.5 });
++  assert.deepStrictEqual(ok, { ok: true, value: { heartRate: 89, temperature: 38.4, latitude: 3.1, longitude: 101.5 } });
++  assert.strictEqual(r.sanitizeReading({ heartRate: 900 }).ok, false);
++  assert.strictEqual(r.sanitizeReading({ temperature: "abc" }).ok, false);
++  assert.strictEqual(r.sanitizeReading({ latitude: 95 }).error, "latitude_out_of_range");
++  assert.strictEqual(r.sanitizeReading({}).error, "empty_reading");
++});
+diff --git a/havapaw/lib/config/collar_config.dart b/havapaw/lib/config/collar_config.dart
+new file mode 100644
+index 0000000..7f878fb
+--- /dev/null
++++ b/havapaw/lib/config/collar_config.dart
+@@ -0,0 +1,10 @@
++/// Settings shared between the app and the collar firmware setup.
++class CollarConfig {
++  CollarConfig._();
++
++  /// HTTPS endpoint of the `ingestCollarData` Cloud Function.
++  /// If you deploy the function to another region, change the region part here.
++  /// (Deploy with: firebase deploy --only functions,firestore:rules)
++  static const String ingestUrl =
++      'https://us-central1-havapaw-11e23.cloudfunctions.net/ingestCollarData';
++}
+diff --git a/havapaw/lib/main.dart b/havapaw/lib/main.dart
+index 87faa6c..5f897d8 100644
+--- a/havapaw/lib/main.dart
++++ b/havapaw/lib/main.dart
+@@ -8,7 +8,7 @@ import 'firebase_options.dart';
+ import 'theme/app_theme.dart';
+ import 'screens/splash_screen.dart';
+ import 'screens/login_screen.dart';
+-import 'screens/home_screen.dart';
++import 'screens/consent_screen.dart';
+ import 'services/notification_service.dart';
+ import 'services/selected_pet_service.dart';
+ import 'services/sound_service.dart';
+@@ -71,7 +71,7 @@ class HavaPawApp extends StatelessWidget {
+       routes: {
+         '/splash': (context) => const SplashScreen(),
+         '/login': (context) => const AuthWrapper(),
+-        '/home': (context) => const HomeScreen(),
++        '/home': (context) => const ConsentGate(),
+       },
+     );
+   }
+diff --git a/havapaw/lib/screens/collar_connection_screen.dart b/havapaw/lib/screens/collar_connection_screen.dart
+index ac45d3e..fe9fe4d 100644
+--- a/havapaw/lib/screens/collar_connection_screen.dart
++++ b/havapaw/lib/screens/collar_connection_screen.dart
+@@ -1,9 +1,11 @@
+ import 'package:cloud_firestore/cloud_firestore.dart';
+ import 'package:easy_localization/easy_localization.dart';
+ import 'package:firebase_auth/firebase_auth.dart';
++import 'dart:math';
++
+ import 'package:flutter/material.dart';
+ 
+-import '../firebase_options.dart';
++import '../config/collar_config.dart';
+ import '../models/pet.dart';
+ import '../services/esp32_ble_service.dart';
+ import '../services/pet_service.dart';
+@@ -309,18 +311,29 @@ class _CollarConnectionScreenState extends State<CollarConnectionScreen> {
+     });
+ 
+     try {
+-      final options = DefaultFirebaseOptions.currentPlatform;
++      // Secret the collar will send with every upload. It is registered in
++      // Firestore (readable only by the Cloud Function) before the collar gets it.
++      final token = _generateDeviceToken();
+       final collarId = await Esp32BleService.provisionAndBind(
+         collar: device,
+         payload: CollarProvisionPayload(
+           wifiSsid: wifi.$1,
+           wifiPassword: wifi.$2,
+-          ownerUid: uid,
+-          petId: pet.id!,
+-          projectId: options.projectId,
+-          apiKey: options.apiKey,
++          ingestUrl: CollarConfig.ingestUrl,
++          deviceToken: token,
+           deviceId: device.name,
+         ),
++        onDeviceIdResolved: (boundId) async {
++          await FirebaseFirestore.instance
++              .collection('deviceTokens')
++              .doc(boundId)
++              .set({
++            'uid': uid,
++            'petId': pet.id,
++            'token': token,
++            'createdAt': FieldValue.serverTimestamp(),
++          });
++        },
+       );
+ 
+       await PetService.updatePet(pet.id!, {'collarId': collarId});
+@@ -357,6 +370,14 @@ class _CollarConnectionScreenState extends State<CollarConnectionScreen> {
+     }
+   }
+ 
++  /// 32 random bytes as 64 hex characters.
++  String _generateDeviceToken() {
++    final rng = Random.secure();
++    return List.generate(32, (_) => rng.nextInt(256))
++        .map((b) => b.toRadixString(16).padLeft(2, '0'))
++        .join();
++  }
++
+   Future<Pet?> _resolveSelectedPet() async {
+     final snap = await PetService.getPetsStream().first;
+     final pets = snap.docs
+diff --git a/havapaw/lib/screens/consent_screen.dart b/havapaw/lib/screens/consent_screen.dart
+new file mode 100644
+index 0000000..3ba3c5d
+--- /dev/null
++++ b/havapaw/lib/screens/consent_screen.dart
+@@ -0,0 +1,199 @@
++import 'package:cloud_firestore/cloud_firestore.dart';
++import 'package:firebase_auth/firebase_auth.dart';
++import 'package:flutter/material.dart';
++
++import '../services/auth_service.dart';
++import '../theme/app_theme.dart';
++import 'home_screen.dart';
++import 'privacy_policy_screen.dart';
++import 'terms_of_service_screen.dart';
++
++/// Bump this when the data use described below changes; users are asked again.
++const int kConsentVersion = 1;
++
++/// Shows the consent screen once per account (and again if [kConsentVersion]
++/// changes), then continues to the home screen. The decision is stored at
++/// users/{uid}.consent so it follows the account across devices.
++class ConsentGate extends StatefulWidget {
++  const ConsentGate({super.key});
++
++  @override
++  State<ConsentGate> createState() => _ConsentGateState();
++}
++
++class _ConsentGateState extends State<ConsentGate> {
++  bool? _consented;
++  bool _agreeTerms = false;
++  bool _agreeData = false;
++  bool _saving = false;
++  String? _error;
++
++  @override
++  void initState() {
++    super.initState();
++    _load();
++  }
++
++  Future<void> _load() async {
++    final uid = FirebaseAuth.instance.currentUser?.uid;
++    if (uid == null) {
++      setState(() => _consented = true); // not signed in: nothing to gate
++      return;
++    }
++    try {
++      final doc =
++          await FirebaseFirestore.instance.collection('users').doc(uid).get();
++      final consent = doc.data()?['consent'];
++      final version = consent is Map ? (consent['version'] as num?)?.toInt() : null;
++      if (!mounted) return;
++      setState(() {
++        _consented = version != null && version >= kConsentVersion;
++        _error = null;
++      });
++    } catch (_) {
++      if (!mounted) return;
++      setState(() {
++        _consented = false;
++        _error = 'Could not check your consent status. Check your connection and try again.';
++      });
++    }
++  }
++
++  Future<void> _accept() async {
++    final uid = FirebaseAuth.instance.currentUser?.uid;
++    if (uid == null) return;
++    setState(() {
++      _saving = true;
++      _error = null;
++    });
++    try {
++      await FirebaseFirestore.instance.collection('users').doc(uid).set({
++        'consent': {
++          'version': kConsentVersion,
++          'acceptedAt': FieldValue.serverTimestamp(),
++          'termsAndPrivacy': true,
++          'healthLocationData': true,
++          'aiProcessing': true,
++        },
++      }, SetOptions(merge: true));
++      if (!mounted) return;
++      setState(() => _consented = true);
++    } catch (_) {
++      if (!mounted) return;
++      setState(() {
++        _saving = false;
++        _error = 'Could not save your choice. Please try again.';
++      });
++    }
++  }
++
++  Future<void> _decline() async {
++    await AuthService.signOut();
++    if (!mounted) return;
++    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    if (_consented == null) {
++      return const Scaffold(
++        body: Center(child: CircularProgressIndicator(color: AppColors.primaryTeal)),
++      );
++    }
++    if (_consented == true) return const HomeScreen();
++
++    return Scaffold(
++      body: SafeArea(
++        child: ListView(
++          padding: const EdgeInsets.all(24),
++          children: [
++            const SizedBox(height: 8),
++            const Icon(Icons.verified_user_rounded, size: 48, color: AppColors.primaryTeal),
++            const SizedBox(height: 16),
++            const Text(
++              'Your data, your choice',
++              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.slateDark),
++            ),
++            const SizedBox(height: 12),
++            const Text(
++              'HavaPaw collects readings from your pet\'s collar (heart rate, temperature, '
++              'blood oxygen, movement and GPS location) together with your pet\'s profile '
++              '(species, breed, birthday and weight). This is used to show your pet\'s health '
++              'and location, to send alerts, and to learn what is normal for your pet.',
++              style: TextStyle(fontSize: 14, height: 1.5),
++            ),
++            const SizedBox(height: 12),
++            const Text(
++              'When you use the Virtual Vet, a short summary of your pet\'s profile and latest '
++              'readings is sent to an AI service (OpenAI) to write the advice. It is guidance only '
++              'and does not replace a veterinarian.',
++              style: TextStyle(fontSize: 14, height: 1.5),
++            ),
++            const SizedBox(height: 12),
++            const Text(
++              'Your data is stored in your own account, in line with the Personal Data '
++              'Protection Act 2010 (Malaysia). You can withdraw consent at any time by '
++              'signing out and asking for your account to be deleted.',
++              style: TextStyle(fontSize: 14, height: 1.5),
++            ),
++            const SizedBox(height: 16),
++            Wrap(
++              children: [
++                TextButton(
++                  onPressed: () => Navigator.push(
++                    context,
++                    MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
++                  ),
++                  child: const Text('Privacy Policy'),
++                ),
++                TextButton(
++                  onPressed: () => Navigator.push(
++                    context,
++                    MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
++                  ),
++                  child: const Text('Terms of Service'),
++                ),
++              ],
++            ),
++            CheckboxListTile(
++              value: _agreeTerms,
++              onChanged: _saving ? null : (v) => setState(() => _agreeTerms = v ?? false),
++              controlAffinity: ListTileControlAffinity.leading,
++              contentPadding: EdgeInsets.zero,
++              title: const Text('I have read and agree to the Privacy Policy and Terms of Service.'),
++            ),
++            CheckboxListTile(
++              value: _agreeData,
++              onChanged: _saving ? null : (v) => setState(() => _agreeData = v ?? false),
++              controlAffinity: ListTileControlAffinity.leading,
++              contentPadding: EdgeInsets.zero,
++              title: const Text(
++                'I consent to HavaPaw collecting and processing my pet\'s health and location '
++                'data, including sending summaries to an AI service for the Virtual Vet.',
++              ),
++            ),
++            if (_error != null) ...[
++              const SizedBox(height: 8),
++              Text(_error!, style: const TextStyle(color: Colors.red)),
++            ],
++            const SizedBox(height: 16),
++            ElevatedButton(
++              onPressed: (_agreeTerms && _agreeData && !_saving) ? _accept : null,
++              child: _saving
++                  ? const SizedBox(
++                      height: 20,
++                      width: 20,
++                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
++                    )
++                  : const Text('Agree and continue'),
++            ),
++            TextButton(
++              onPressed: _saving ? null : _decline,
++              child: const Text('Decline and sign out'),
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++}
+diff --git a/havapaw/lib/screens/login_screen.dart b/havapaw/lib/screens/login_screen.dart
+index 9e3c13b..d50b0d0 100644
+--- a/havapaw/lib/screens/login_screen.dart
++++ b/havapaw/lib/screens/login_screen.dart
+@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
+ import 'package:easy_localization/easy_localization.dart';
+ import '../theme/app_theme.dart';
+ import '../services/auth_service.dart';
+-import 'home_screen.dart';
++import 'consent_screen.dart';
+ import 'register_screen.dart';
+  
+ class LoginScreen extends StatefulWidget {
+@@ -33,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
+       if (mounted) {
+         Navigator.pushReplacement(
+           context,
+-          MaterialPageRoute(builder: (_) => const HomeScreen()),
++          MaterialPageRoute(builder: (_) => const ConsentGate()),
+         );
+       }
+     } on Exception catch (e) {
+@@ -116,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
+       if (mounted) {
+         Navigator.pushReplacement(
+           context,
+-          MaterialPageRoute(builder: (_) => const HomeScreen()),
++          MaterialPageRoute(builder: (_) => const ConsentGate()),
+         );
+       }
+     } on Exception catch (e) {
+diff --git a/havapaw/lib/screens/notification_settings_screen.dart b/havapaw/lib/screens/notification_settings_screen.dart
+index 0224f92..061a5e6 100644
+--- a/havapaw/lib/screens/notification_settings_screen.dart
++++ b/havapaw/lib/screens/notification_settings_screen.dart
+@@ -1,3 +1,5 @@
++import 'package:cloud_firestore/cloud_firestore.dart';
++import 'package:firebase_auth/firebase_auth.dart';
+ import 'package:flutter/material.dart';
+ import 'package:easy_localization/easy_localization.dart';
+ import 'package:shared_preferences/shared_preferences.dart';
+@@ -39,6 +41,24 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
+   Future<void> _saveSetting(String key, bool value) async {
+     final prefs = await SharedPreferences.getInstance();
+     await prefs.setBool(key, value);
++
++    // Mirror the alert switches to Firestore: the server sends the pushes, so it
++    // needs to know which ones the owner has turned off.
++    const cloudKeys = {
++      'push_notifications': 'push',
++      'health_alerts': 'health',
++      'geofence_alerts': 'geofence',
++      'low_battery_alerts': 'battery',
++    };
++    final cloudKey = cloudKeys[key];
++    final uid = FirebaseAuth.instance.currentUser?.uid;
++    if (cloudKey != null && uid != null) {
++      try {
++        await FirebaseFirestore.instance.collection('users').doc(uid).set({
++          'alertPrefs': {cloudKey: value},
++        }, SetOptions(merge: true));
++      } catch (_) {}
++    }
+   }
+ 
+   @override
+diff --git a/havapaw/lib/screens/register_screen.dart b/havapaw/lib/screens/register_screen.dart
+index f819ee9..8444315 100644
+--- a/havapaw/lib/screens/register_screen.dart
++++ b/havapaw/lib/screens/register_screen.dart
+@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
+ import 'package:easy_localization/easy_localization.dart';
+ import '../theme/app_theme.dart';
+ import '../services/auth_service.dart';
+-import 'home_screen.dart';
++import 'consent_screen.dart';
+ 
+ class RegisterScreen extends StatefulWidget {
+   const RegisterScreen({super.key});
+@@ -37,7 +37,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
+       if (mounted) {
+         Navigator.pushAndRemoveUntil(
+           context,
+-          MaterialPageRoute(builder: (_) => const HomeScreen()),
++          MaterialPageRoute(builder: (_) => const ConsentGate()),
+           (_) => false,
+         );
+       }
+diff --git a/havapaw/lib/services/auth_service.dart b/havapaw/lib/services/auth_service.dart
+index 8bc18f4..ed729ff 100644
+--- a/havapaw/lib/services/auth_service.dart
++++ b/havapaw/lib/services/auth_service.dart
+@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
+ import 'package:cloud_firestore/cloud_firestore.dart';
+ import 'package:google_sign_in/google_sign_in.dart';
+ 
++import 'notification_service.dart';
++
+ // Handles user login, registration, and profile updates.
+ class AuthService {
+   static final FirebaseAuth _auth = FirebaseAuth.instance;
+@@ -43,6 +45,7 @@ class AuthService {
+ 
+   // Signs out the current user.
+   static Future<void> signOut() async {
++    await NotificationService.removeTokenForCurrentUser();
+     await _auth.signOut();
+   }
+ 
+diff --git a/havapaw/lib/services/collar_ble_protocol.dart b/havapaw/lib/services/collar_ble_protocol.dart
+index 76b4882..da991f2 100644
+--- a/havapaw/lib/services/collar_ble_protocol.dart
++++ b/havapaw/lib/services/collar_ble_protocol.dart
+@@ -7,7 +7,9 @@ class CollarBleProtocol {
+   static const String serviceUuid = '7b1e0001-5f8a-4b2c-9e3d-1a2b3c4d5e6f';
+ 
+   /// Write UTF-8 JSON config:
+-  /// {ssid, pass, uid, petId, projectId, apiKey, deviceId}
++  /// {ssid, pass, url, token, deviceId}
++  /// `url` is the ingestCollarData endpoint and `token` is the per-device secret
++  /// registered in Firestore (deviceTokens/{deviceId}) by the app.
+   static const String configCharUuid = '7b1e0002-5f8a-4b2c-9e3d-1a2b3c4d5e6f';
+ 
+   /// Notify UTF-8 status: READY | WIFI_OK | WIFI_FAIL | FIREBASE_OK | FIREBASE_FAIL | ERROR:...
+diff --git a/havapaw/lib/services/esp32_ble_service.dart b/havapaw/lib/services/esp32_ble_service.dart
+index bd4d562..94607fe 100644
+--- a/havapaw/lib/services/esp32_ble_service.dart
++++ b/havapaw/lib/services/esp32_ble_service.dart
+@@ -26,29 +26,23 @@ class DiscoveredCollar {
+ class CollarProvisionPayload {
+   final String wifiSsid;
+   final String wifiPassword;
+-  final String ownerUid;
+-  final String petId;
+-  final String projectId;
+-  final String apiKey;
++  final String ingestUrl;
++  final String deviceToken;
+   final String deviceId;
+ 
+   const CollarProvisionPayload({
+     required this.wifiSsid,
+     required this.wifiPassword,
+-    required this.ownerUid,
+-    required this.petId,
+-    required this.projectId,
+-    required this.apiKey,
++    required this.ingestUrl,
++    required this.deviceToken,
+     required this.deviceId,
+   });
+ 
+   String toJsonString() => jsonEncode({
+         'ssid': wifiSsid,
+         'pass': wifiPassword,
+-        'uid': ownerUid,
+-        'petId': petId,
+-        'projectId': projectId,
+-        'apiKey': apiKey,
++        'url': ingestUrl,
++        'token': deviceToken,
+         'deviceId': deviceId,
+       });
+ }
+@@ -245,6 +239,11 @@ class Esp32BleService {
+     required DiscoveredCollar collar,
+     required CollarProvisionPayload payload,
+     Duration timeout = const Duration(seconds: 45),
++
++    /// Called once the collar's real device id is known and before the
++    /// configuration (including the secret token) is written to it. Use it to
++    /// register the token server-side so the collar's first upload is accepted.
++    Future<void> Function(String deviceId)? onDeviceIdResolved,
+   }) async {
+     await stopScan();
+     final device = collar.device;
+@@ -303,13 +302,15 @@ class Esp32BleService {
+         } catch (_) {}
+       }
+ 
++      if (onDeviceIdResolved != null) {
++        await onDeviceIdResolved(boundId);
++      }
++
+       final effectivePayload = CollarProvisionPayload(
+         wifiSsid: payload.wifiSsid,
+         wifiPassword: payload.wifiPassword,
+-        ownerUid: payload.ownerUid,
+-        petId: payload.petId,
+-        projectId: payload.projectId,
+-        apiKey: payload.apiKey,
++        ingestUrl: payload.ingestUrl,
++        deviceToken: payload.deviceToken,
+         deviceId: boundId,
+       );
+ 
+diff --git a/havapaw/lib/services/notification_service.dart b/havapaw/lib/services/notification_service.dart
+index 949ceb1..5e4c00d 100644
+--- a/havapaw/lib/services/notification_service.dart
++++ b/havapaw/lib/services/notification_service.dart
+@@ -1,5 +1,8 @@
++import 'package:cloud_firestore/cloud_firestore.dart';
++import 'package:firebase_auth/firebase_auth.dart';
+ import 'package:firebase_core/firebase_core.dart';
+ import 'package:firebase_messaging/firebase_messaging.dart';
++import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+ import 'package:flutter/widgets.dart';
+ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+ import 'package:permission_handler/permission_handler.dart';
+@@ -34,6 +37,12 @@ class NotificationService {
+     await _initializeLocalNotifications();
+     await _getFCMToken();
+ 
++    // Register this device's token under the signed-in user so the Cloud
++    // Function (onCollarReading) knows where to send alerts.
++    FirebaseAuth.instance.authStateChanges().listen((user) {
++      if (user != null) saveTokenForCurrentUser();
++    });
++
+     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
+     FirebaseMessaging.instance.getInitialMessage().then(_handleInitialMessage);
+@@ -85,12 +94,50 @@ class NotificationService {
+       fcmToken = await _messaging.getToken();
+       _messaging.onTokenRefresh.listen((newToken) {
+         fcmToken = newToken;
++        saveTokenForCurrentUser();
+       });
+     } catch (_) {
+       // Token may not be available on all platforms during development.
+     }
+   }
+ 
++  // Stores the FCM token at users/{uid}/fcmTokens/{token}.
++  static Future<void> saveTokenForCurrentUser() async {
++    final uid = FirebaseAuth.instance.currentUser?.uid;
++    final token = fcmToken;
++    if (uid == null || token == null) return;
++    try {
++      await FirebaseFirestore.instance
++          .collection('users')
++          .doc(uid)
++          .collection('fcmTokens')
++          .doc(token)
++          .set({
++        'token': token,
++        'platform': defaultTargetPlatform.name,
++        'updatedAt': FieldValue.serverTimestamp(),
++      });
++    } catch (_) {
++      // Will be retried on the next sign-in or token refresh.
++    }
++  }
++
++  // Removes this device's token for the current user (call before signing out)
++  // so alerts for that account stop arriving on this phone.
++  static Future<void> removeTokenForCurrentUser() async {
++    final uid = FirebaseAuth.instance.currentUser?.uid;
++    final token = fcmToken;
++    if (uid == null || token == null) return;
++    try {
++      await FirebaseFirestore.instance
++          .collection('users')
++          .doc(uid)
++          .collection('fcmTokens')
++          .doc(token)
++          .delete();
++    } catch (_) {}
++  }
++
+   // Shows a local notification when a push message arrives in the foreground.
+   static Future<void> _handleForegroundMessage(RemoteMessage message) async {
+     await _showLocalNotification(
+diff --git a/havapaw/lib/services/walk_state_service.dart b/havapaw/lib/services/walk_state_service.dart
+index 9c72d2e..227f5fd 100644
+--- a/havapaw/lib/services/walk_state_service.dart
++++ b/havapaw/lib/services/walk_state_service.dart
+@@ -1,3 +1,5 @@
++import 'package:cloud_firestore/cloud_firestore.dart';
++import 'package:firebase_auth/firebase_auth.dart';
+ import 'package:flutter/material.dart';
+ import 'package:shared_preferences/shared_preferences.dart';
+ 
+@@ -17,6 +19,17 @@ class WalkStateService {
+     notifier.value = isOnWalk;
+     final prefs = await SharedPreferences.getInstance();
+     await prefs.setBool(_walkStateKey, isOnWalk);
++
++    // The server checks this flag before sending a "left the safe zone" alert.
++    final uid = FirebaseAuth.instance.currentUser?.uid;
++    if (uid != null) {
++      try {
++        await FirebaseFirestore.instance
++            .collection('users')
++            .doc(uid)
++            .set({'onWalk': isOnWalk}, SetOptions(merge: true));
++      } catch (_) {}
++    }
+   }
+ 
+   static bool get isOnWalk => _isOnWalk;
+-- 
+2.43.0
+

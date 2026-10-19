@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
-import 'home_screen.dart';
+import 'consent_screen.dart';
 import 'register_screen.dart';
  
 class LoginScreen extends StatefulWidget {
@@ -33,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (_) => const ConsentGate()),
         );
       }
     } on Exception catch (e) {
@@ -116,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (_) => const ConsentGate()),
         );
       }
     } on Exception catch (e) {

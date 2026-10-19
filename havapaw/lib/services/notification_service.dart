@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -33,6 +36,12 @@ class NotificationService {
     await _requestPermissions();
     await _initializeLocalNotifications();
     await _getFCMToken();
+
+    // Register this device's token under the signed-in user so the Cloud
+    // Function (onCollarReading) knows where to send alerts.
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null) saveTokenForCurrentUser();
+    });
 
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
@@ -85,10 +94,48 @@ class NotificationService {
       fcmToken = await _messaging.getToken();
       _messaging.onTokenRefresh.listen((newToken) {
         fcmToken = newToken;
+        saveTokenForCurrentUser();
       });
     } catch (_) {
       // Token may not be available on all platforms during development.
     }
+  }
+
+  // Stores the FCM token at users/{uid}/fcmTokens/{token}.
+  static Future<void> saveTokenForCurrentUser() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final token = fcmToken;
+    if (uid == null || token == null) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('fcmTokens')
+          .doc(token)
+          .set({
+        'token': token,
+        'platform': defaultTargetPlatform.name,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Will be retried on the next sign-in or token refresh.
+    }
+  }
+
+  // Removes this device's token for the current user (call before signing out)
+  // so alerts for that account stop arriving on this phone.
+  static Future<void> removeTokenForCurrentUser() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final token = fcmToken;
+    if (uid == null || token == null) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('fcmTokens')
+          .doc(token)
+          .delete();
+    } catch (_) {}
   }
 
   // Shows a local notification when a push message arrives in the foreground.

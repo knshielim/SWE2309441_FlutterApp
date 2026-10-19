@@ -26,29 +26,23 @@ class DiscoveredCollar {
 class CollarProvisionPayload {
   final String wifiSsid;
   final String wifiPassword;
-  final String ownerUid;
-  final String petId;
-  final String projectId;
-  final String apiKey;
+  final String ingestUrl;
+  final String deviceToken;
   final String deviceId;
 
   const CollarProvisionPayload({
     required this.wifiSsid,
     required this.wifiPassword,
-    required this.ownerUid,
-    required this.petId,
-    required this.projectId,
-    required this.apiKey,
+    required this.ingestUrl,
+    required this.deviceToken,
     required this.deviceId,
   });
 
   String toJsonString() => jsonEncode({
         'ssid': wifiSsid,
         'pass': wifiPassword,
-        'uid': ownerUid,
-        'petId': petId,
-        'projectId': projectId,
-        'apiKey': apiKey,
+        'url': ingestUrl,
+        'token': deviceToken,
         'deviceId': deviceId,
       });
 }
@@ -245,6 +239,11 @@ class Esp32BleService {
     required DiscoveredCollar collar,
     required CollarProvisionPayload payload,
     Duration timeout = const Duration(seconds: 45),
+
+    /// Called once the collar's real device id is known and before the
+    /// configuration (including the secret token) is written to it. Use it to
+    /// register the token server-side so the collar's first upload is accepted.
+    Future<void> Function(String deviceId)? onDeviceIdResolved,
   }) async {
     await stopScan();
     final device = collar.device;
@@ -303,13 +302,15 @@ class Esp32BleService {
         } catch (_) {}
       }
 
+      if (onDeviceIdResolved != null) {
+        await onDeviceIdResolved(boundId);
+      }
+
       final effectivePayload = CollarProvisionPayload(
         wifiSsid: payload.wifiSsid,
         wifiPassword: payload.wifiPassword,
-        ownerUid: payload.ownerUid,
-        petId: payload.petId,
-        projectId: payload.projectId,
-        apiKey: payload.apiKey,
+        ingestUrl: payload.ingestUrl,
+        deviceToken: payload.deviceToken,
         deviceId: boundId,
       );
 

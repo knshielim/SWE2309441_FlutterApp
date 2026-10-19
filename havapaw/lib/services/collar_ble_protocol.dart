@@ -7,7 +7,9 @@ class CollarBleProtocol {
   static const String serviceUuid = '7b1e0001-5f8a-4b2c-9e3d-1a2b3c4d5e6f';
 
   /// Write UTF-8 JSON config:
-  /// {ssid, pass, uid, petId, projectId, apiKey, deviceId}
+  /// {ssid, pass, url, token, deviceId}
+  /// `url` is the ingestCollarData endpoint and `token` is the per-device secret
+  /// registered in Firestore (deviceTokens/{deviceId}) by the app.
   static const String configCharUuid = '7b1e0002-5f8a-4b2c-9e3d-1a2b3c4d5e6f';
 
   /// Notify UTF-8 status: READY | WIFI_OK | WIFI_FAIL | FIREBASE_OK | FIREBASE_FAIL | ERROR:...

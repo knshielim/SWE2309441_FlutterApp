@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +19,17 @@ class WalkStateService {
     notifier.value = isOnWalk;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_walkStateKey, isOnWalk);
+
+    // The server checks this flag before sending a "left the safe zone" alert.
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .set({'onWalk': isOnWalk}, SetOptions(merge: true));
+      } catch (_) {}
+    }
   }
 
   static bool get isOnWalk => _isOnWalk;

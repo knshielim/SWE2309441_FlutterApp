@@ -8,7 +8,7 @@ import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/consent_screen.dart';
 import 'services/notification_service.dart';
 import 'services/selected_pet_service.dart';
 import 'services/sound_service.dart';
@@ -71,7 +71,7 @@ class HavaPawApp extends StatelessWidget {
       routes: {
         '/splash': (context) => const SplashScreen(),
         '/login': (context) => const AuthWrapper(),
-        '/home': (context) => const HomeScreen(),
+        '/home': (context) => const ConsentGate(),
       },
     );
   }

@@ -43,6 +43,13 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // R8 shrinks the release build. tflite_flutter references optional GPU classes
+            // that are not bundled, so proguard-rules.pro tells R8 to ignore them.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
