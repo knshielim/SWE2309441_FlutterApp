@@ -52,7 +52,7 @@ static const float    TEMP_MIN_C             = 20.0f;
 static const float    TEMP_MAX_C             = 45.0f;
 
 // Optional battery monitor. -1 = not wired, the battery field is then not sent.
-static const int      BATTERY_ADC_PIN        = -1;     // e.g. 34
+static const int      BATTERY_ADC_PIN        = 34;     // -1 = no battery divider fitted
 static const float    BATTERY_DIVIDER_RATIO  = 2.0f;   // (R1+R2)/R2 of your divider
 // ==============================================================================
 
