@@ -22,7 +22,8 @@ USAGE (from the havapaw_ml folder):
 The real-readings CSV needs these columns (same meaning as the training features):
     species (dog/cat), heart_rate, temperature, spo2, activity_index, steps,
     activity_ratio_3day, hr_deviation_pct, temp_deviation_c, age, weight,
-    label (0=resting, 1=active, 2=stressed, 3=anomaly)
+    label (resting/active/stressed/anomaly or 0-3; empty rows are skipped)
+export_collar_readings.py writes this file from Firestore.
 """
 
 import argparse
@@ -88,7 +89,15 @@ def calibration_summary():
 
 
 def evaluate_real(clf, species_encoder, csv_path):
-    real = pd.read_csv(csv_path)
+    real = pd.read_csv(csv_path, keep_default_na=False)
+    # Labels may be names (resting/active/stressed/anomaly) or ids; empty rows are unlabelled.
+    names = {n: i for i, n in enumerate(LABEL_NAMES)}
+    real["label"] = real["label"].astype(str).str.strip().str.lower().map(
+        lambda v: names.get(v, int(v) if v.isdigit() else None))
+    real = real[real["label"].notna()].copy()
+    if real.empty:
+        raise SystemExit(f"No labelled rows in {csv_path}: fill in the label column first.")
+    real["label"] = real["label"].astype(int)
     real["species_encoded"] = species_encoder.transform(real["species"])
     X, y = real[FEATURE_COLUMNS], real["label"]
     preds = clf.predict(X)

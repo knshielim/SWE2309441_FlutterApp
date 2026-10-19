@@ -1,2 +1,7 @@
 secrets.h.cpp
 /havapaw_ml/external/raw
+
+# Real collar exports (personal data) and Firebase service-account keys
+/havapaw_ml/data/real_readings*.csv
+*service-account*.json
+*-firebase-adminsdk-*.json
