@@ -62,3 +62,40 @@ test("sanitizeReading keeps known fields, rounds ints, rejects bad ranges", () =
   assert.strictEqual(r.sanitizeReading({ latitude: 95 }).error, "latitude_out_of_range");
   assert.strictEqual(r.sanitizeReading({}).error, "empty_reading");
 });
+
+test("daily stats: split by rest/active, keep last 4 days, skip readings without steps", () => {
+  let d = {};
+  d = r.addToDailyStats(d, { heartRate: 80, steps: 10 }, "2026-10-01");
+  d = r.addToDailyStats(d, { heartRate: 120, steps: 400 }, "2026-10-01");
+  d = r.addToDailyStats(d, { heartRate: 90 }, "2026-10-01");
+  assert.deepStrictEqual(d["2026-10-01"], { restSum: 80, restN: 1, activeSum: 120, activeN: 1 });
+  for (const day of ["2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05"]) {
+    d = r.addToDailyStats(d, { heartRate: 80, steps: 10 }, day);
+  }
+  assert.deepStrictEqual(Object.keys(d), ["2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05"]);
+});
+
+test("deviation: needs a baseline from earlier days, compares like with like, 35% threshold", () => {
+  const day = (restMean, activeMean, n = 40) => ({
+    restSum: restMean * n, restN: n, activeSum: activeMean * n, activeN: n,
+  });
+  const daily = { "2026-10-02": day(80, 120), "2026-10-03": day(80, 120), "2026-10-04": day(80, 120) };
+  const today = "2026-10-05";
+
+  // no history yet
+  assert.strictEqual(r.deviationCheck({ heartRate: 200, steps: 10 }, {}, today), null);
+  // today's own data is not part of the baseline
+  assert.strictEqual(r.deviationCheck({ heartRate: 200, steps: 10 }, { [today]: day(80, 120, 500) }, today), null);
+  // a walk is compared with the active baseline: 150 vs 120 is +25%, no alert
+  assert.strictEqual(r.deviationCheck({ heartRate: 150, steps: 400 }, daily, today), null);
+  // resting at 110 vs 80 is +37.5%
+  const dev = r.deviationCheck({ heartRate: 110, steps: 10 }, daily, today);
+  assert.strictEqual(dev.state, "rest");
+  assert.strictEqual(dev.baselineHr, 80);
+  assert.ok(Math.abs(dev.deviation - 0.375) < 1e-9);
+  // drops count too: 50 vs 80 is -37.5%
+  assert.ok(r.deviationCheck({ heartRate: 50, steps: 10 }, daily, today).deviation < 0);
+  // only the last 3 earlier days count
+  const old = { "2026-09-30": day(200, 200, 1000), ...daily };
+  assert.strictEqual(r.deviationCheck({ heartRate: 100, steps: 10 }, old, today), null);
+});

@@ -42,6 +42,7 @@ Firestore may ask for composite indexes the first time the geofence query runs
 | Geofence | Make a 50 m zone, walk out with Walk mode OFF | push "left the safe zone" after 2 readings |
 | Walk mode | Same, Walk mode ON | no push |
 | Health alert | Lower a pet's weight/age in the profile or temporarily lower the limit in `rules.js`, or post a test reading | push after 2 abnormal readings, then at most one per 15 min |
+| Baseline deviation | Needs at least one earlier day of readings (60+ in the same resting/active state). Then send two resting readings 35%+ above that baseline, or edit `daily` in `alertState/<petId>` to fake a baseline | push written by GPT-4, e.g. "heart rate is 40% higher than usual"; `alerts` doc has `generatedBy` |
 | Low battery | Battery under 15 % | one push, re-arms after 25 % |
 | Settings | Turn "Health alerts" off | no health push |
 | Consent | New account | consent screen before Home |
@@ -53,3 +54,9 @@ curl -X POST "$INGEST_URL" -H "Content-Type: application/json" \
   -H "X-Device-Token: <64-hex token from Firestore deviceTokens/<deviceId>>" \
   -d '{"deviceId":"HavaPaw-ESP32-ABCD","heartRate":170,"temperature":38.6,"steps":5,"batteryLevel":12}'
 ```
+
+## 4. Collar TLS
+
+The collar checks the server certificate against Google's root CAs (GTS Root R1 and R4,
+valid until 2036) instead of accepting any certificate. It needs the time from NTP first;
+until the clock is set it reports `TIME_WAIT` and skips that upload.

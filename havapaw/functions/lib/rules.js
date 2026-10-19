@@ -113,6 +113,74 @@ function isOutsideAllZones(reading, zones) {
   );
 }
 
+/* ---------------------------------------------------------------------------
+ * Personal baseline and deviation index (proposal Figure 3).
+ *
+ * For each pet the server keeps per-day heart-rate sums, split into resting and
+ * active readings (steps in the collar's 5-minute window below/above
+ * REST_STEPS), so a walk is never compared with a nap. The baseline is the mean
+ * over the previous BASELINE_DAYS days (today excluded). A reading whose heart
+ * rate differs from the matching baseline by DEVIATION_THRESHOLD or more is a
+ * deviation.
+ * ------------------------------------------------------------------------- */
+const REST_STEPS = 100;
+const BASELINE_DAYS = 3;
+const MIN_BASELINE_SAMPLES = 60; // about 30 minutes of uploads in that state
+const DEVIATION_THRESHOLD = 0.35;
+
+function dayKey(ms) {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function activityState(reading) {
+  if (!isNum(reading.steps)) return null;
+  return reading.steps < REST_STEPS ? "rest" : "active";
+}
+
+/** Returns a new daily-stats map with this reading added; keeps the last BASELINE_DAYS + 1 days. */
+function addToDailyStats(daily, reading, today) {
+  const out = { ...(daily || {}) };
+  const st = activityState(reading);
+  if (st && isNum(reading.heartRate)) {
+    const day = { ...(out[today] || {}) };
+    day[`${st}Sum`] = (day[`${st}Sum`] || 0) + reading.heartRate;
+    day[`${st}N`] = (day[`${st}N`] || 0) + 1;
+    out[today] = day;
+  }
+  const keep = Object.keys(out).sort().slice(-(BASELINE_DAYS + 1));
+  return Object.fromEntries(keep.map((k) => [k, out[k]]));
+}
+
+/** Mean heart rate for one activity state over the previous days, or null if too little data. */
+function baselineHeartRate(daily, today, state) {
+  const days = Object.keys(daily || {})
+    .filter((k) => k < today)
+    .sort()
+    .slice(-BASELINE_DAYS);
+  let sum = 0;
+  let n = 0;
+  for (const k of days) {
+    sum += daily[k][`${state}Sum`] || 0;
+    n += daily[k][`${state}N`] || 0;
+  }
+  if (n < MIN_BASELINE_SAMPLES) return null;
+  return { mean: sum / n, samples: n, days: days.length };
+}
+
+/**
+ * Deviation of this reading from the pet's own baseline.
+ * Returns null when there is no baseline yet or the deviation is below the threshold.
+ */
+function deviationCheck(reading, daily, today) {
+  const state = activityState(reading);
+  if (!state || !isNum(reading.heartRate)) return null;
+  const base = baselineHeartRate(daily, today, state);
+  if (!base) return null;
+  const deviation = (reading.heartRate - base.mean) / base.mean;
+  if (Math.abs(deviation) < DEVIATION_THRESHOLD) return null;
+  return { state, baselineHr: base.mean, deviation, baselineDays: base.days };
+}
+
 /**
  * Validates and cleans a reading sent by the collar. Unknown fields are dropped.
  * Returns { ok: true, value } or { ok: false, error }.
@@ -149,6 +217,7 @@ function sanitizeReading(body) {
 module.exports = {
   LOW_BATTERY_PCT,
   BATTERY_RECOVER_PCT,
+  DEVIATION_THRESHOLD,
   petAgeYears,
   heartRateThreshold,
   temperatureThreshold,
@@ -157,4 +226,8 @@ module.exports = {
   topHealthAlert,
   isOutsideAllZones,
   sanitizeReading,
+  dayKey,
+  addToDailyStats,
+  baselineHeartRate,
+  deviationCheck,
 };

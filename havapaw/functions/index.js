@@ -118,6 +118,10 @@ ${trimmedQuestion
  *
  *  2. onCollarReading   - Firestore trigger that applies the alert rules
  *     (health, geofence, low battery) and sends FCM push notifications.
+ *     It also keeps each pet's personal heart-rate baseline (previous 3 days,
+ *     resting and active kept apart). When a reading deviates from it by 35%
+ *     or more, GPT-4 turns the reading into a plain-language note that is
+ *     sent as the push (proposal Figure 3: deviation index -> GPT-4 -> push).
  * ======================================================================== */
 const crypto = require("crypto");
 const admin = require("firebase-admin");
@@ -200,6 +204,60 @@ exports.ingestCollarData = onRequest(
   }
 );
 
+const DEVIATION_SYSTEM_PROMPT = `You write push notifications for HavaPaw, a smart pet collar app.
+A reading from the pet's collar differs from that pet's own normal (its personal
+baseline over the previous days). Write 2 short sentences, at most 220 characters
+in total, in plain language for a non-expert owner: say what changed compared
+with the pet's normal, and one concrete thing to do now. Stay calm. Never give a
+diagnosis. If the change is large or the temperature is high, suggest contacting
+a vet. Plain text only, no emoji, no markdown.`;
+
+async function deviationAlert(pet, reading, dev) {
+  const name = pet.name || "Your pet";
+  const pct = Math.round(Math.abs(dev.deviation) * 100);
+  const dir = dev.deviation > 0 ? "higher" : "lower";
+  const stateText = dev.state === "rest" ? "resting" : "active";
+  const alert = {
+    type: "baselineDeviation",
+    severity: Math.abs(dev.deviation) >= 0.5 ? 0.85 : 0.65,
+    title: `${name}'s heart rate is ${pct}% ${dir} than usual`,
+    // Used if GPT-4 is unavailable.
+    body: `${name}'s ${stateText} heart rate is ${Math.round(reading.heartRate)} bpm; ` +
+      `normal for ${name} is about ${Math.round(dev.baselineHr)} bpm. Check on ${name}.`,
+    deviation: dev.deviation,
+    baselineHr: dev.baselineHr,
+  };
+  try {
+    const age = rules.petAgeYears(pet.birthday);
+    const openai = new OpenAI({ apiKey: OPENAI_API_KEY.value(), timeout: 15000, maxRetries: 1 });
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: DEVIATION_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `Pet: ${name}, ${pet.type || "unknown species"}, breed ${pet.breed || "unknown"}, ` +
+            `${age || "unknown"} years, ${pet.weight || "unknown"} kg.
+State: ${stateText} (${reading.steps} steps in the last 5 minutes).
+Heart rate now: ${Math.round(reading.heartRate)} bpm. Personal ${stateText} baseline: ` +
+            `${Math.round(dev.baselineHr)} bpm over the previous ${dev.baselineDays} day(s) (${pct}% ${dir}).
+Temperature: ${reading.temperature ?? "n/a"} degC. SpO2: ${reading.bloodOxygen ?? "n/a"}%.`,
+        },
+      ],
+      temperature: 0.3,
+      max_tokens: 120,
+    });
+    const text = completion.choices?.[0]?.message?.content?.trim();
+    if (text) {
+      alert.body = text.length > 300 ? `${text.slice(0, 297)}...` : text;
+      alert.generatedBy = completion.model;
+    }
+  } catch (e) {
+    logger.warn("GPT-4 deviation note failed; sending the fallback text", e);
+  }
+  return alert;
+}
+
 async function sendPush(uid, petId, alert) {
   const tokensSnap = await db.collection("users").doc(uid).collection("fcmTokens").get();
   const tokens = tokensSnap.docs.map((d) => d.id);
@@ -209,6 +267,11 @@ async function sendPush(uid, petId, alert) {
     severity: alert.severity,
     title: alert.title,
     body: alert.body,
+    ...(alert.deviation !== undefined && {
+      deviation: alert.deviation,
+      baselineHr: alert.baselineHr,
+      generatedBy: alert.generatedBy || "fallback",
+    }),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   if (tokens.length === 0) return;
@@ -238,7 +301,7 @@ async function sendPush(uid, petId, alert) {
 }
 
 exports.onCollarReading = onDocumentCreated(
-  { document: "users/{uid}/collarData/{docId}", maxInstances: 20 },
+  { document: "users/{uid}/collarData/{docId}", maxInstances: 20, secrets: [OPENAI_API_KEY] },
   async (event) => {
     const snap = event.data;
     if (!snap) return;
@@ -289,6 +352,24 @@ exports.onCollarReading = onDocumentCreated(
       }
     }
 
+    // ---- deviation from the pet's own baseline -> GPT-4 note -> push.
+    // Skipped when a threshold health alert already went out for this reading.
+    const today = rules.dayKey(now);
+    const daily = state.daily || {};
+    const dev = rules.deviationCheck(reading, daily, today);
+    counts.deviation = dev ? (counts.deviation || 0) + 1 : 0;
+    if (
+      dev &&
+      prefs.health !== false &&
+      toSend.length === 0 &&
+      counts.deviation >= CONSECUTIVE_READINGS_REQUIRED &&
+      now - (lastSent.deviation || 0) > HEALTH_COOLDOWN_MS
+    ) {
+      lastSent.deviation = now;
+      toSend.push(await deviationAlert(pet, reading, dev));
+    }
+    const newDaily = rules.addToDailyStats(daily, reading, today);
+
     // ---- low battery (once per discharge cycle)
     if (typeof reading.batteryLevel === "number") {
       if (reading.batteryLevel < rules.LOW_BATTERY_PCT && !lowBattery) {
@@ -332,7 +413,8 @@ exports.onCollarReading = onDocumentCreated(
       outside = false;
     }
 
-    await stateRef.set({ counts, lastSent, lowBattery, outside, updatedAt: now }, { merge: true });
+    // No merge: old days must drop out of the daily map.
+    await stateRef.set({ counts, lastSent, lowBattery, outside, daily: newDaily, updatedAt: now });
     for (const alert of toSend) {
       try {
         await sendPush(uid, petId, alert);
