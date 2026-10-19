@@ -3,7 +3,8 @@
     "sources": {
       "cat_activity": "Kaggle: Cat Activity Detection (arifulislaminje) - cite the original paper",
       "dog_activity": "Mendeley Data vxhx934tbn v4 (Vehkaoja et al.)",
-      "dog_hr": "Zenodo record 8020390, Dog Health Vitals Dataset (Invoxia)"
+      "dog_hr": "Zenodo record 8020390, Dog Health Vitals Dataset (Invoxia)",
+      "dog_ecg_rri": "Zenodo record 19383015, dog RRI / cortisol / behaviour in animal-assisted reading"
     },
     "assumptions": [
       "activity_index = x^2+y^2+z^2 of a single accelerometer sample in g",
@@ -526,5 +527,596 @@
       "r_weight": -0.29,
       "r_age": -0.18
     }
+  },
+  "rri": {
+    "n_dogs": 4,
+    "n_recordings": 48,
+    "n_beats": 45460,
+    "by_phase": {
+      "DARA": {
+        "hr_mean": 96.1,
+        "hr_sd": 20.3,
+        "rmssd_ms": 160.2
+      },
+      "POST": {
+        "hr_mean": 73.4,
+        "hr_sd": 17.0,
+        "rmssd_ms": 277.9
+      },
+      "PRE": {
+        "hr_mean": 72.1,
+        "hr_sd": 17.0,
+        "rmssd_ms": 267.5
+      }
+    },
+    "calm_hr_per_dog": {
+      "dog A": 74.6,
+      "dog B": 54.7,
+      "dog C": 90.0,
+      "dog D": 71.7
+    },
+    "calm_hr_range": [
+      47.8,
+      107.3
+    ],
+    "dara_vs_pre": [
+      {
+        "dog": "dog A",
+        "trial": 1,
+        "pre": 107.3,
+        "dara": 91.6,
+        "change": -0.146
+      },
+      {
+        "dog": "dog A",
+        "trial": 2,
+        "pre": 64.0,
+        "dara": 109.1,
+        "change": 0.705
+      },
+      {
+        "dog": "dog A",
+        "trial": 3,
+        "pre": 61.6,
+        "dara": 89.1,
+        "change": 0.446
+      },
+      {
+        "dog": "dog A",
+        "trial": 4,
+        "pre": 65.8,
+        "dara": 77.7,
+        "change": 0.181
+      },
+      {
+        "dog": "dog B",
+        "trial": 1,
+        "pre": 52.2,
+        "dara": 79.5,
+        "change": 0.523
+      },
+      {
+        "dog": "dog B",
+        "trial": 2,
+        "pre": 64.1,
+        "dara": 82.3,
+        "change": 0.284
+      },
+      {
+        "dog": "dog B",
+        "trial": 3,
+        "pre": 47.8,
+        "dara": 72.8,
+        "change": 0.523
+      },
+      {
+        "dog": "dog B",
+        "trial": 4,
+        "pre": 57.3,
+        "dara": 64.0,
+        "change": 0.117
+      },
+      {
+        "dog": "dog C",
+        "trial": 1,
+        "pre": 100.9,
+        "dara": 128.7,
+        "change": 0.276
+      },
+      {
+        "dog": "dog C",
+        "trial": 2,
+        "pre": 75.4,
+        "dara": 105.7,
+        "change": 0.402
+      },
+      {
+        "dog": "dog C",
+        "trial": 3,
+        "pre": 80.2,
+        "dara": 93.0,
+        "change": 0.16
+      },
+      {
+        "dog": "dog C",
+        "trial": 4,
+        "pre": 96.3,
+        "dara": 139.8,
+        "change": 0.452
+      },
+      {
+        "dog": "dog D",
+        "trial": 1,
+        "pre": 71.0,
+        "dara": 90.8,
+        "change": 0.279
+      },
+      {
+        "dog": "dog D",
+        "trial": 2,
+        "pre": 68.1,
+        "dara": 107.4,
+        "change": 0.577
+      },
+      {
+        "dog": "dog D",
+        "trial": 3,
+        "pre": 78.3,
+        "dara": 113.4,
+        "change": 0.448
+      },
+      {
+        "dog": "dog D",
+        "trial": 4,
+        "pre": 62.9,
+        "dara": 92.5,
+        "change": 0.471
+      }
+    ],
+    "dara_vs_pre_mean_change": 0.356,
+    "trials_at_or_above_deviation_threshold": 9,
+    "dara_recordings_above_fixed_limit": 0,
+    "n_trials": 16,
+    "cortisol_ug_ml_mean": {
+      "PRE": 0.102,
+      "DARA": 0.188,
+      "pairs": 15,
+      "pairs_higher_during": 9,
+      "max": 1.216
+    },
+    "sessions": [
+      {
+        "dog": "dog A",
+        "trial": 1,
+        "phase": "PRE",
+        "beats": 706,
+        "minutes": 7.1,
+        "hr_mean": 107.3,
+        "rmssd_ms": 193.9
+      },
+      {
+        "dog": "dog A",
+        "trial": 1,
+        "phase": "DARA",
+        "beats": 742,
+        "minutes": 8.6,
+        "hr_mean": 91.6,
+        "rmssd_ms": 188.2
+      },
+      {
+        "dog": "dog A",
+        "trial": 1,
+        "phase": "POST",
+        "beats": 934,
+        "minutes": 11.1,
+        "hr_mean": 89.8,
+        "rmssd_ms": 223.3
+      },
+      {
+        "dog": "dog A",
+        "trial": 2,
+        "phase": "PRE",
+        "beats": 564,
+        "minutes": 9.5,
+        "hr_mean": 64.0,
+        "rmssd_ms": 447.2
+      },
+      {
+        "dog": "dog A",
+        "trial": 2,
+        "phase": "DARA",
+        "beats": 500,
+        "minutes": 4.7,
+        "hr_mean": 109.1,
+        "rmssd_ms": 73.7
+      },
+      {
+        "dog": "dog A",
+        "trial": 2,
+        "phase": "POST",
+        "beats": 934,
+        "minutes": 14.9,
+        "hr_mean": 77.8,
+        "rmssd_ms": 486.6
+      },
+      {
+        "dog": "dog A",
+        "trial": 3,
+        "phase": "PRE",
+        "beats": 928,
+        "minutes": 16.2,
+        "hr_mean": 61.6,
+        "rmssd_ms": 430.7
+      },
+      {
+        "dog": "dog A",
+        "trial": 3,
+        "phase": "DARA",
+        "beats": 515,
+        "minutes": 6.2,
+        "hr_mean": 89.1,
+        "rmssd_ms": 211.0
+      },
+      {
+        "dog": "dog A",
+        "trial": 3,
+        "phase": "POST",
+        "beats": 890,
+        "minutes": 13.9,
+        "hr_mean": 68.7,
+        "rmssd_ms": 374.4
+      },
+      {
+        "dog": "dog A",
+        "trial": 4,
+        "phase": "PRE",
+        "beats": 771,
+        "minutes": 13.0,
+        "hr_mean": 65.8,
+        "rmssd_ms": 282.6
+      },
+      {
+        "dog": "dog A",
+        "trial": 4,
+        "phase": "DARA",
+        "beats": 311,
+        "minutes": 4.3,
+        "hr_mean": 77.7,
+        "rmssd_ms": 174.6
+      },
+      {
+        "dog": "dog A",
+        "trial": 4,
+        "phase": "POST",
+        "beats": 283,
+        "minutes": 4.9,
+        "hr_mean": 61.9,
+        "rmssd_ms": 262.7
+      },
+      {
+        "dog": "dog B",
+        "trial": 1,
+        "phase": "PRE",
+        "beats": 934,
+        "minutes": 20.2,
+        "hr_mean": 52.2,
+        "rmssd_ms": 486.9
+      },
+      {
+        "dog": "dog B",
+        "trial": 1,
+        "phase": "DARA",
+        "beats": 640,
+        "minutes": 9.0,
+        "hr_mean": 79.5,
+        "rmssd_ms": 288.6
+      },
+      {
+        "dog": "dog B",
+        "trial": 1,
+        "phase": "POST",
+        "beats": 812,
+        "minutes": 18.2,
+        "hr_mean": 52.0,
+        "rmssd_ms": 616.4
+      },
+      {
+        "dog": "dog B",
+        "trial": 2,
+        "phase": "PRE",
+        "beats": 1193,
+        "minutes": 20.5,
+        "hr_mean": 64.1,
+        "rmssd_ms": 301.4
+      },
+      {
+        "dog": "dog B",
+        "trial": 2,
+        "phase": "DARA",
+        "beats": 326,
+        "minutes": 4.3,
+        "hr_mean": 82.3,
+        "rmssd_ms": 227.9
+      },
+      {
+        "dog": "dog B",
+        "trial": 2,
+        "phase": "POST",
+        "beats": 834,
+        "minutes": 16.9,
+        "hr_mean": 56.2,
+        "rmssd_ms": 385.8
+      },
+      {
+        "dog": "dog B",
+        "trial": 3,
+        "phase": "PRE",
+        "beats": 881,
+        "minutes": 19.8,
+        "hr_mean": 47.8,
+        "rmssd_ms": 392.2
+      },
+      {
+        "dog": "dog B",
+        "trial": 3,
+        "phase": "DARA",
+        "beats": 248,
+        "minutes": 3.7,
+        "hr_mean": 72.8,
+        "rmssd_ms": 169.5
+      },
+      {
+        "dog": "dog B",
+        "trial": 3,
+        "phase": "POST",
+        "beats": 846,
+        "minutes": 18.5,
+        "hr_mean": 50.0,
+        "rmssd_ms": 429.5
+      },
+      {
+        "dog": "dog B",
+        "trial": 4,
+        "phase": "PRE",
+        "beats": 888,
+        "minutes": 17.0,
+        "hr_mean": 57.3,
+        "rmssd_ms": 224.8
+      },
+      {
+        "dog": "dog B",
+        "trial": 4,
+        "phase": "DARA",
+        "beats": 402,
+        "minutes": 6.6,
+        "hr_mean": 64.0,
+        "rmssd_ms": 230.8
+      },
+      {
+        "dog": "dog B",
+        "trial": 4,
+        "phase": "POST",
+        "beats": 1154,
+        "minutes": 21.7,
+        "hr_mean": 57.8,
+        "rmssd_ms": 225.4
+      },
+      {
+        "dog": "dog C",
+        "trial": 1,
+        "phase": "PRE",
+        "beats": 1119,
+        "minutes": 12.0,
+        "hr_mean": 100.9,
+        "rmssd_ms": 188.0
+      },
+      {
+        "dog": "dog C",
+        "trial": 1,
+        "phase": "DARA",
+        "beats": 973,
+        "minutes": 8.0,
+        "hr_mean": 128.7,
+        "rmssd_ms": 107.5
+      },
+      {
+        "dog": "dog C",
+        "trial": 1,
+        "phase": "POST",
+        "beats": 1398,
+        "minutes": 14.0,
+        "hr_mean": 107.0,
+        "rmssd_ms": 160.8
+      },
+      {
+        "dog": "dog C",
+        "trial": 2,
+        "phase": "PRE",
+        "beats": 1422,
+        "minutes": 20.0,
+        "hr_mean": 75.4,
+        "rmssd_ms": 198.0
+      },
+      {
+        "dog": "dog C",
+        "trial": 2,
+        "phase": "DARA",
+        "beats": 867,
+        "minutes": 8.7,
+        "hr_mean": 105.7,
+        "rmssd_ms": 129.8
+      },
+      {
+        "dog": "dog C",
+        "trial": 2,
+        "phase": "POST",
+        "beats": 1452,
+        "minutes": 20.0,
+        "hr_mean": 77.1,
+        "rmssd_ms": 191.7
+      },
+      {
+        "dog": "dog C",
+        "trial": 3,
+        "phase": "PRE",
+        "beats": 1488,
+        "minutes": 19.9,
+        "hr_mean": 80.2,
+        "rmssd_ms": 214.1
+      },
+      {
+        "dog": "dog C",
+        "trial": 3,
+        "phase": "DARA",
+        "beats": 529,
+        "minutes": 6.0,
+        "hr_mean": 93.0,
+        "rmssd_ms": 183.9
+      },
+      {
+        "dog": "dog C",
+        "trial": 3,
+        "phase": "POST",
+        "beats": 1503,
+        "minutes": 20.0,
+        "hr_mean": 78.0,
+        "rmssd_ms": 205.8
+      },
+      {
+        "dog": "dog C",
+        "trial": 4,
+        "phase": "PRE",
+        "beats": 1604,
+        "minutes": 18.0,
+        "hr_mean": 96.3,
+        "rmssd_ms": 198.4
+      },
+      {
+        "dog": "dog C",
+        "trial": 4,
+        "phase": "DARA",
+        "beats": 1141,
+        "minutes": 8.4,
+        "hr_mean": 139.8,
+        "rmssd_ms": 51.7
+      },
+      {
+        "dog": "dog C",
+        "trial": 4,
+        "phase": "POST",
+        "beats": 1932,
+        "minutes": 20.0,
+        "hr_mean": 104.9,
+        "rmssd_ms": 176.1
+      },
+      {
+        "dog": "dog D",
+        "trial": 1,
+        "phase": "PRE",
+        "beats": 1332,
+        "minutes": 20.0,
+        "hr_mean": 71.0,
+        "rmssd_ms": 197.3
+      },
+      {
+        "dog": "dog D",
+        "trial": 1,
+        "phase": "DARA",
+        "beats": 988,
+        "minutes": 11.4,
+        "hr_mean": 90.8,
+        "rmssd_ms": 114.8
+      },
+      {
+        "dog": "dog D",
+        "trial": 1,
+        "phase": "POST",
+        "beats": 1404,
+        "minutes": 20.0,
+        "hr_mean": 72.8,
+        "rmssd_ms": 152.2
+      },
+      {
+        "dog": "dog D",
+        "trial": 2,
+        "phase": "PRE",
+        "beats": 1285,
+        "minutes": 20.0,
+        "hr_mean": 68.1,
+        "rmssd_ms": 208.2
+      },
+      {
+        "dog": "dog D",
+        "trial": 2,
+        "phase": "DARA",
+        "beats": 599,
+        "minutes": 6.0,
+        "hr_mean": 107.4,
+        "rmssd_ms": 140.4
+      },
+      {
+        "dog": "dog D",
+        "trial": 2,
+        "phase": "POST",
+        "beats": 1087,
+        "minutes": 17.1,
+        "hr_mean": 66.8,
+        "rmssd_ms": 213.7
+      },
+      {
+        "dog": "dog D",
+        "trial": 3,
+        "phase": "PRE",
+        "beats": 1452,
+        "minutes": 20.0,
+        "hr_mean": 78.3,
+        "rmssd_ms": 131.8
+      },
+      {
+        "dog": "dog D",
+        "trial": 3,
+        "phase": "DARA",
+        "beats": 743,
+        "minutes": 6.9,
+        "hr_mean": 113.4,
+        "rmssd_ms": 87.4
+      },
+      {
+        "dog": "dog D",
+        "trial": 3,
+        "phase": "POST",
+        "beats": 1334,
+        "minutes": 16.9,
+        "hr_mean": 83.8,
+        "rmssd_ms": 132.6
+      },
+      {
+        "dog": "dog D",
+        "trial": 4,
+        "phase": "PRE",
+        "beats": 1180,
+        "minutes": 19.7,
+        "hr_mean": 62.9,
+        "rmssd_ms": 185.0
+      },
+      {
+        "dog": "dog D",
+        "trial": 4,
+        "phase": "DARA",
+        "beats": 733,
+        "minutes": 8.5,
+        "hr_mean": 92.5,
+        "rmssd_ms": 184.0
+      },
+      {
+        "dog": "dog D",
+        "trial": 4,
+        "phase": "POST",
+        "beats": 659,
+        "minutes": 10.1,
+        "hr_mean": 69.6,
+        "rmssd_ms": 209.6
+      }
+    ]
   }
 }

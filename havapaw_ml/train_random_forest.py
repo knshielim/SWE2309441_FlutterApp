@@ -80,6 +80,9 @@ def calibration_summary():
     if "invoxia" in cal:
         parts.append(f"- dog resting heart rate compared with {cal['invoxia']['n_dogs']} real dogs "
                      "(Invoxia); see external/external_calibration_report.md")
+    if "rri" in cal:
+        parts.append(f"- heart-rate thresholds checked against ECG recordings of {cal['rri']['n_dogs']} dogs "
+                     "(Zenodo 19383015); not used for training")
     parts.append("- steps, SpO2, temperature and the stressed/anomaly classes remain synthetic")
     return "\n".join(parts) + "\n"
 

@@ -9,6 +9,7 @@ Dataset: 20000 readings from 500 simulated pet profiles.
 - activity_index (cat) drawn from real accelerometer data: 1,331,811 resting and 445,588 active samples
 - activity_index (dog) drawn from real accelerometer data: 198,868 resting and 145,489 active samples
 - dog resting heart rate compared with 40 real dogs (Invoxia); see external/external_calibration_report.md
+- heart-rate thresholds checked against ECG recordings of 4 dogs (Zenodo 19383015); not used for training
 - steps, SpO2, temperature and the stressed/anomaly classes remain synthetic
 
 ## Splitting
