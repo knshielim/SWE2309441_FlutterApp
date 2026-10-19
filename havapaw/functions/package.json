@@ -2,7 +2,7 @@
   "name": "havapaw-functions",
   "description": "Firebase Cloud Functions for HavaPaw - GPT-4 Virtual Vet",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
