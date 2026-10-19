@@ -272,7 +272,8 @@ void applyConfigJson(const String &json) {
 
 class ConfigCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *characteristic) override {
-    String value = characteristic->getValue();
+    // .c_str() works whether getValue() returns std::string (esp32 core 2.x) or String (3.x)
+    String value = characteristic->getValue().c_str();
     if (value.length() == 0) return;
     configBuffer += value;
     // Complete JSON object received
