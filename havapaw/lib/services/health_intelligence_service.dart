@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import '../models/collar_data.dart';
 import '../models/pet.dart';
@@ -13,7 +15,7 @@ enum HealthStatus {
 enum HealthAlertType {
   highHeartRate, // Heart rate > 140
   stressWarning, // High heart rate + low movement
-  lowActivity, // Activity < 50% of 3-day average
+  lowActivity, // Today's activity more than 35% below the 3-day average
   highTemperature, // Temperature above threshold
   dehydrationRisk, // Predictive analysis
 }
@@ -39,8 +41,11 @@ class HealthIntelligenceService {
   // Thresholds based on research (can be customized per pet)
   static const double highHeartRateThreshold = 140.0; // BPM
   static const double highTemperatureThreshold = 39.5; // Celsius
-  static const double lowActivityThreshold = 0.5; // 50% of normal
+  // Low activity = today more than 35% below the 3-day average (Malar et al., 2026)
+  static const double lowActivityThreshold = 0.65;
   static const int learningPeriodDays = 3; // 3-day rolling average
+  // Readings needed today before a low-activity alert (one per 30 s, so about 1 hour)
+  static const int minTodayReadingsForActivity = 120;
 
   // Breed-specific heart rate ranges (BPM)
   static const Map<String, Map<String, double>> breedHeartRateRanges = {
@@ -244,42 +249,83 @@ class HealthIntelligenceService {
     return null;
   }
 
-  // Behavior Pattern Learning: Calculate 3-day activity average
-  static double calculateThreeDayAverage(List<CollarData> recentData) {
-    if (recentData.isEmpty) return 0.0;
+  // Behavior Pattern Learning.
+  // The collar sends `steps` = steps counted in its last 5 minutes, once every
+  // 30 s, so readings overlap and cannot be added up into a daily total.
+  // Activity is therefore compared as the average steps per reading: today so
+  // far against the 3 most recent days before today. A ratio of 1.0 means a
+  // normal day, which is how activity_ratio_3day is defined in the training data.
 
-    // Group data by day
-    final Map<String, int> dailySteps = {};
-    for (final data in recentData) {
-      final dateKey = '${data.timestamp.year}-${data.timestamp.month}-${data.timestamp.day}';
-      dailySteps[dateKey] = (dailySteps[dateKey] ?? 0) + (data.steps ?? 0);
-    }
-
-    // Get last 3 days of data
-    final sortedDays = dailySteps.keys.toList()..sort();
-    final recentDays = sortedDays.take(learningPeriodDays).toList();
-
-    if (recentDays.isEmpty) return 0.0;
-
-    // Calculate average
-    int totalSteps = 0;
-    for (final day in recentDays) {
-      totalSteps += dailySteps[day] ?? 0;
-    }
-
-    return totalSteps / recentDays.length;
+  static String _dayKey(DateTime t) {
+    final d = t.toLocal();
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
-  // Low Activity Warning: Today's activity < 50% of 3-day average
+  // Average steps per reading over the 3 most recent days before today
+  // (each day weighted equally). 0.0 when there is no earlier day yet.
+  static double calculateThreeDayAverage(List<CollarData> recentData, {DateTime? now}) {
+    final today = _dayKey(now ?? DateTime.now());
+    final Map<String, List<int>> stepsByDay = {};
+    for (final data in recentData) {
+      final steps = data.steps;
+      if (steps == null) continue;
+      final key = _dayKey(data.timestamp);
+      if (key.compareTo(today) >= 0) continue;
+      stepsByDay.putIfAbsent(key, () => []).add(steps);
+    }
+    if (stepsByDay.isEmpty) return 0.0;
+
+    final days = stepsByDay.keys.toList()..sort();
+    final recentDays = days.sublist(max(0, days.length - learningPeriodDays));
+    final dailyMeans = recentDays.map((day) {
+      final values = stepsByDay[day]!;
+      return values.reduce((a, b) => a + b) / values.length;
+    }).toList();
+    return dailyMeans.reduce((a, b) => a + b) / dailyMeans.length;
+  }
+
+  // Today's readings with steps, including [current] if it is not already in [historicalData].
+  static List<int> _todaySteps(CollarData current, List<CollarData> historicalData, DateTime now) {
+    final today = _dayKey(now);
+    final todays = historicalData.where((d) => d.steps != null && _dayKey(d.timestamp) == today).toList();
+    if (current.steps != null &&
+        _dayKey(current.timestamp) == today &&
+        !todays.any((d) => d.id != null && d.id == current.id)) {
+      todays.add(current);
+    }
+    return todays.map((d) => d.steps!).toList();
+  }
+
+  // Today's average steps per reading divided by the 3-day average.
+  // null when there is no earlier day to compare with.
+  static double? calculateActivityRatio(
+    CollarData current,
+    List<CollarData> historicalData, {
+    DateTime? now,
+  }) {
+    final at = now ?? DateTime.now();
+    final threeDayAverage = calculateThreeDayAverage(historicalData, now: at);
+    if (threeDayAverage <= 0) return null;
+    final today = _todaySteps(current, historicalData, at);
+    if (today.isEmpty) return null;
+    final todayAverage = today.reduce((a, b) => a + b) / today.length;
+    return todayAverage / threeDayAverage;
+  }
+
+  // Low Activity Warning: today's activity more than 35% below the 3-day average
   static HealthAlert? detectLowActivity(
     CollarData currentData,
-    List<CollarData> historicalData,
-  ) {
-    final todaySteps = currentData.steps ?? 0;
-    final threeDayAverage = calculateThreeDayAverage(historicalData);
-
-    if (threeDayAverage > 0 && todaySteps < threeDayAverage * lowActivityThreshold) {
-      final percentage = (todaySteps / threeDayAverage * 100).toStringAsFixed(0);
+    List<CollarData> historicalData, {
+    DateTime? now,
+  }) {
+    final at = now ?? DateTime.now();
+    // Wait for enough of today's readings so an early-morning nap is not a "low day".
+    if (_todaySteps(currentData, historicalData, at).length < minTodayReadingsForActivity) {
+      return null;
+    }
+    final ratio = calculateActivityRatio(currentData, historicalData, now: at);
+    if (ratio != null && ratio < lowActivityThreshold) {
+      final percentage = (ratio * 100).toStringAsFixed(0);
       return HealthAlert(
         type: HealthAlertType.lowActivity,
         message: 'Low activity detected: $percentage% of normal',

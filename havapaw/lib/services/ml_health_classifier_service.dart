@@ -61,7 +61,7 @@ class MLHealthClassifierService {
   }
 
   /// Classifies a single collar reading for [pet], given its 3-day rolling
-  /// activity baseline (see HealthIntelligenceService.calculateThreeDayAverage).
+  /// activity baseline (see HealthIntelligenceService.calculateActivityRatio).
   /// Returns null if the model isn't loaded yet or data is insufficient.
   static Future<MLClassificationResult?> classify(
     CollarData reading,
@@ -133,8 +133,8 @@ class MLHealthClassifierService {
     // data is missing, matching the training distribution's resting baseline.
     final safeActivityIndex = activityIndex > 0 ? activityIndex : 1.0;
 
-    final threeDayAvg = HealthIntelligenceService.calculateThreeDayAverage(historicalData);
-    final activityRatio = threeDayAvg > 0 ? steps / threeDayAvg : 1.0;
+    final activityRatio =
+        HealthIntelligenceService.calculateActivityRatio(reading, historicalData) ?? 1.0;
 
     // Calibrated resting HR baseline (population prior blended with the
     // pet's own history over the proposal's 30-day window -- see

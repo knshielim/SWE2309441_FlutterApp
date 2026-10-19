@@ -37,8 +37,7 @@ class VirtualVetService {
       historicalData,
     );
 
-    final threeDayAvg = HealthIntelligenceService.calculateThreeDayAverage(historicalData);
-    final activityRatio = threeDayAvg > 0 ? (reading.steps ?? 0) / threeDayAvg : null;
+    final activityRatio = HealthIntelligenceService.calculateActivityRatio(reading, historicalData);
 
     final callable = _functions.httpsCallable(
       'generateVirtualVetAdvice',

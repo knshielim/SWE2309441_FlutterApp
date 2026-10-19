@@ -22,8 +22,9 @@ Ranges used below are grounded in sources already cited in the proposal:
 - SpO2 healthy resting range ~95-100% (MAX30102 datasheet / Saputra et al., 2021
   sensor accuracy figures)
 - "Stress" defined per Malar et al. (2026): elevated HR + low activity
-- "Low activity" defined as < 50% of a 3-day rolling average (proposal's own
-  context-aware logic, already implemented in health_intelligence_service.dart)
+- "Low activity" = today more than 35% below the 3-day rolling average (Malar et
+  al., 2026), i.e. activity_ratio_3day < 0.65 in the app
+  (HealthIntelligenceService.lowActivityThreshold)
 
 Classes (matches Figure 3 of the proposal - "Random Forest classifier ...
 classifies activity state: resting, active, stressed, anomaly"):

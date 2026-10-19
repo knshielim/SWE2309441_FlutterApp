@@ -222,29 +222,80 @@ void main() {
   });
 
   group('calculateThreeDayAverage', () {
+    // Midday so +/- a few hours stays on the same calendar day.
+    final now = DateTime(2026, 10, 20, 12);
+
     test('returns 0.0 for empty input', () {
-      expect(HealthIntelligenceService.calculateThreeDayAverage([]), 0.0);
+      expect(HealthIntelligenceService.calculateThreeDayAverage([], now: now), 0.0);
     });
 
-    test('averages total daily steps across up to 3 most recent days', () {
-      final now = DateTime.now();
+    test('averages steps per reading for each earlier day, then across days', () {
       final data = [
-        _reading(steps: 1000, timestamp: now),
-        _reading(steps: 2000, timestamp: now.subtract(const Duration(days: 1))),
-        _reading(steps: 3000, timestamp: now.subtract(const Duration(days: 2))),
+        _reading(steps: 10, timestamp: now.subtract(const Duration(days: 1))),
+        _reading(steps: 30, timestamp: now.subtract(const Duration(days: 1, hours: 1))),
+        _reading(steps: 40, timestamp: now.subtract(const Duration(days: 2))),
       ];
-      // (1000 + 2000 + 3000) / 3 days = 2000
-      expect(HealthIntelligenceService.calculateThreeDayAverage(data), 2000.0);
+      // day -1: (10 + 30) / 2 = 20; day -2: 40 -> (20 + 40) / 2 = 30
+      expect(HealthIntelligenceService.calculateThreeDayAverage(data, now: now), 30.0);
     });
 
-    test('sums multiple readings within the same day before averaging', () {
-      final now = DateTime.now();
+    test('ignores today and keeps only the 3 most recent earlier days', () {
       final data = [
-        _reading(steps: 500, timestamp: now),
-        _reading(steps: 500, timestamp: now.add(const Duration(hours: 1))),
+        _reading(steps: 999, timestamp: now),
+        for (var d = 1; d <= 3; d++) _reading(steps: 20, timestamp: now.subtract(Duration(days: d))),
+        _reading(steps: 500, timestamp: now.subtract(const Duration(days: 4))),
       ];
-      // both readings are "today" -> total 1000 steps / 1 day = 1000
-      expect(HealthIntelligenceService.calculateThreeDayAverage(data), 1000.0);
+      expect(HealthIntelligenceService.calculateThreeDayAverage(data, now: now), 20.0);
+    });
+
+    test('orders days correctly across a month boundary', () {
+      final oct10 = DateTime(2026, 10, 10, 12);
+      final data = [
+        _reading(steps: 100, timestamp: DateTime(2026, 9, 30, 12)), // oldest, should drop out
+        _reading(steps: 20, timestamp: DateTime(2026, 10, 7, 12)),
+        _reading(steps: 20, timestamp: DateTime(2026, 10, 8, 12)),
+        _reading(steps: 20, timestamp: DateTime(2026, 10, 9, 12)),
+      ];
+      expect(HealthIntelligenceService.calculateThreeDayAverage(data, now: oct10), 20.0);
+    });
+  });
+
+  group('activity ratio and low activity', () {
+    final now = DateTime(2026, 10, 20, 18);
+    List<CollarData> history(int todaySteps, {int todayCount = 130}) => [
+          for (var d = 1; d <= 3; d++)
+            for (var i = 0; i < 10; i++)
+              _reading(steps: 40, timestamp: now.subtract(Duration(days: d, minutes: i))),
+          for (var i = 0; i < todayCount; i++)
+            _reading(steps: todaySteps, timestamp: now.subtract(Duration(minutes: i))),
+        ];
+
+    test('ratio is today vs the 3-day average', () {
+      final current = _reading(steps: 40, timestamp: now);
+      expect(HealthIntelligenceService.calculateActivityRatio(current, history(20), now: now),
+          closeTo(0.5, 0.01));
+    });
+
+    test('ratio is null without an earlier day', () {
+      final current = _reading(steps: 40, timestamp: now);
+      expect(HealthIntelligenceService.calculateActivityRatio(current, [current], now: now), isNull);
+    });
+
+    test('alerts when today is more than 35% below normal', () {
+      final current = _reading(steps: 20, timestamp: now);
+      expect(HealthIntelligenceService.detectLowActivity(current, history(20), now: now)?.type,
+          HealthAlertType.lowActivity);
+    });
+
+    test('no alert at 70% of normal (a 30% drop)', () {
+      final current = _reading(steps: 28, timestamp: now);
+      expect(HealthIntelligenceService.detectLowActivity(current, history(28), now: now), isNull);
+    });
+
+    test('no alert before about an hour of readings today', () {
+      final current = _reading(steps: 0, timestamp: now);
+      expect(HealthIntelligenceService.detectLowActivity(current, history(0, todayCount: 30), now: now),
+          isNull);
     });
   });
 }
