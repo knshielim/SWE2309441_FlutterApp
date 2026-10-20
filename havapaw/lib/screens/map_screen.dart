@@ -109,7 +109,6 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // Opens the safe zone setup form.
   void _showGeofenceForm({required String petId, List<Geofence>? geofences}) {
     showModalBottomSheet(
       context: context,

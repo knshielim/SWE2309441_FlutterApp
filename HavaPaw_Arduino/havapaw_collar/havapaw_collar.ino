@@ -1,29 +1,4 @@
-/*
- * HavaPaw ESP32 Smart Collar firmware
- *
- * Flow:
- *  1) Advertises as HavaPaw-ESP32-XXXX over BLE
- *  2) App writes a JSON config {ssid, pass, url, token, deviceId} to the Config characteristic
- *     (and registers the token in Firestore: deviceTokens/{deviceId})
- *  3) ESP32 joins Wi-Fi and POSTs a reading every 30 s to the ingestCollarData Cloud Function,
- *     sending the secret token in the X-Device-Token header. The function writes
- *     users/{uid}/collarData/{autoId}; no Firestore credentials are stored on the collar.
- *
- * Sensors (see havapaw_sensors.h for wiring and tuning constants):
- *   MAX30102 -> heart rate + SpO2, MPU6050 -> acceleration + steps, DS18B20 -> temperature,
- *   NEO-6M   -> GPS (RX2 = GPIO16 <- GPS TX, TX2 = GPIO17 -> GPS RX)
- *
- * Power: the sensor task must run continuously (heart rate needs a steady PPG stream and the
- * step counter uses a 5-minute window), so deep sleep is not used. Instead the CPU runs at
- * 80 MHz, Wi-Fi modem sleep is on, uploads are 30 s apart and BLE advertising stops after
- * pairing. Set BATTERY_ADC_PIN in havapaw_sensors.h to enable battery reporting and the
- * low-battery push notification.
- *
- * Arduino IDE boards: ESP32 Dev Module
- * Libraries: ArduinoJson 6.x (Benoit Blanchon), SparkFun MAX3010x, Adafruit MPU6050,
- *            OneWire, DallasTemperature, TinyGPSPlus
- */
-
+// HavaPaw collar: BLE pairing, Wi-Fi upload every 30 s
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -31,7 +6,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-#include <TinyGPSPlus.h>   // Library Manager: "TinyGPSPlus" by Mikal Hart
+#include <TinyGPSPlus.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include "havapaw_sensors.h"
@@ -42,12 +17,6 @@
 #define STATUS_CHAR_UUID    "7b1e0003-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
 #define DEVICE_ID_CHAR_UUID "7b1e0004-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
 
-// ---- TLS -------------------------------------------------------------------
-// Root certificates the ingest endpoint (*.cloudfunctions.net) chains to.
-// The collar only talks to a server whose certificate is signed by one of these,
-// so the device token cannot be captured by a fake Wi-Fi access point or proxy.
-// Both roots are valid until 2036. Certificate dates are checked, so the clock
-// must be set by NTP before the first upload.
 static const char GOOGLE_ROOT_CAS[] =
 // GTS Root R1
 "-----BEGIN CERTIFICATE-----\n"
@@ -96,7 +65,7 @@ static const char GOOGLE_ROOT_CAS[] =
 "p/SgguMh1YQdc4acLa/KNJvxn7kjNuK8YAOdgLOaVsjh4rsUecrNIdSUtUlD\n"
 "-----END CERTIFICATE-----\n";
 
-// ---- GPS (NEO-6M) ----------------------------------------------------------
+// GPS (NEO-6M)
 #define GPS_RX_PIN 16          // ESP32 RX2  <- GPS TX
 #define GPS_TX_PIN 17          // ESP32 TX2  -> GPS RX
 #define GPS_MAX_AGE_MS 120000  // a position older than this is not sent
@@ -106,8 +75,6 @@ double lastLat = 0, lastLng = 0;
 uint32_t lastFixMs = 0;
 bool haveFix = false;
 
-// Power: BLE stops advertising this long after boot once the collar is provisioned
-// (power-cycle the collar to pair it again).
 const unsigned long BLE_ADVERTISE_WINDOW_MS = 120000;
 bool bleAdvertisingStopped = false;
 
@@ -118,8 +85,8 @@ BLECharacteristic *deviceIdChar = nullptr;
 String deviceId;
 String wifiSsid;
 String wifiPass;
-String ingestUrl;   // https://<region>-<project>.cloudfunctions.net/ingestCollarData
-String deviceToken; // 64-hex secret registered by the app in deviceTokens/{deviceId}
+String ingestUrl;
+String deviceToken;
 
 String configBuffer;
 bool provisionPending = false;
@@ -170,21 +137,16 @@ bool postCollarReading() {
     return false;
   }
 
-  // Wait briefly for NTP after WiFi: timestamps need it, and so does certificate checking
   for (int i = 0; i < 20 && time(nullptr) < 100000; i++) {
     delay(250);
   }
   if (time(nullptr) < 100000) {
-    // Not a failure: the clock is usually set within a few seconds; try at the next upload.
     notifyStatus("TIME_WAIT");
     return false;
   }
 
-  // Real sensor readings (collected continuously by the sensor task in havapaw_sensors.h)
   SensorSnapshot s = sensorsSnapshot();
   if (!s.hrValid || !s.tempValid) {
-    // Never post made-up or stale vitals: wait until the sensors have a good reading.
-    // (Status text deliberately avoids FAIL/ERROR so the app does not treat it as a failure.)
     String missing = String(s.hrValid ? "" : " heart_rate") + String(s.tempValid ? "" : " temperature");
     notifyStatus("SENSOR_WAIT:" + missing);
     return false;
@@ -197,7 +159,7 @@ bool postCollarReading() {
   if (now > 100000) {
     char iso[32];
     strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
-    doc["timestamp"] = iso;   // server falls back to its own clock if this is missing or far off
+    doc["timestamp"] = iso;
   }
 
   doc["heartRate"] = s.heartRate;
@@ -212,8 +174,6 @@ bool postCollarReading() {
   }
   if (s.batteryPct >= 0) doc["batteryLevel"] = s.batteryPct;
 
-  // Last good GPS position (not older than GPS_MAX_AGE_MS). Without a fix the app
-  // simply keeps showing the previous location.
   if (haveFix && (millis() - lastFixMs) < GPS_MAX_AGE_MS) {
     doc["latitude"] = lastLat;
     doc["longitude"] = lastLng;
@@ -222,7 +182,6 @@ bool postCollarReading() {
   String body;
   serializeJson(doc, body);
 
-  // TLS with the server certificate checked against Google's root CAs (see GOOGLE_ROOT_CAS).
   WiFiClientSecure client;
   client.setCACert(GOOGLE_ROOT_CAS);
   HTTPClient http;
@@ -272,7 +231,6 @@ void applyConfigJson(const String &json) {
 
 class ConfigCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *characteristic) override {
-    // .c_str() works whether getValue() returns std::string (esp32 core 2.x) or String (3.x)
     String value = characteristic->getValue().c_str();
     if (value.length() == 0) return;
     configBuffer += value;
@@ -343,7 +301,7 @@ void loadSavedConfig() {
 void setup() {
   Serial.begin(115200);
   delay(500);
-  setCpuFrequencyMhz(80);   // enough for BLE + Wi-Fi + the 50 Hz sensor task; saves power
+  setCpuFrequencyMhz(80);
   sensorsBegin();
   gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   loadSavedConfig();

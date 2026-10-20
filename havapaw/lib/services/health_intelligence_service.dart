@@ -16,7 +16,7 @@ enum HealthStatus {
 enum HealthAlertType {
   highHeartRate, // Heart rate > 140
   stressWarning, // High heart rate + low movement
-  lowActivity, // Today's activity more than 35% below the 3-day average
+  lowActivity,
   highTemperature, // Temperature above threshold
   dehydrationRisk, // Predictive analysis
 }
@@ -45,7 +45,6 @@ class HealthIntelligenceService {
   // Low activity = today more than 35% below the 3-day average (Malar et al., 2026)
   static const double lowActivityThreshold = 0.65;
   static const int learningPeriodDays = 3; // 3-day rolling average
-  // Readings needed today before a low-activity alert (one per 30 s, so about 1 hour)
   static const int minTodayReadingsForActivity = 120;
 
   // Breed-specific heart rate ranges (BPM)
@@ -54,9 +53,6 @@ class HealthIntelligenceService {
     'cat': {'min': 140.0, 'max': 220.0},
   };
 
-  /// Maps a dog's weight to the size class used by the training pipeline
-  /// (havapaw_ml/data/generate_dataset.py). Boundaries mirror common breed
-  /// weight ranges: toy (Chihuahua-like) through giant (Great Dane-like).
   static String dogSizeClass(double weight) {
     if (weight < 5) return 'toy';
     if (weight < 12) return 'small';
@@ -65,12 +61,6 @@ class HealthIntelligenceService {
     return 'giant';
   }
 
-  /// Population-level RESTING heart rate baseline (the pet's expected normal
-  /// HR at rest) -- distinct from getIndividualizedHeartRateThreshold, which
-  /// is the alert CEILING. Mirrors resting_hr_baseline() in
-  /// havapaw_ml/data/generate_dataset.py exactly, since the ML model's
-  /// hr_deviation_pct feature was trained against this resting baseline, not
-  /// the ceiling. Used as the Bayesian prior in BaselineCalibrationService.
   static double getPopulationRestingHeartRateBaseline(Pet pet) {
     final age = calculatePetAge(pet.birthday);
     final petType = pet.type.toLowerCase();
@@ -250,15 +240,6 @@ class HealthIntelligenceService {
     return null;
   }
 
-  // Behavior Pattern Learning.
-  // The collar sends `steps` = steps counted in its last 5 minutes, once every
-  // 30 s, so readings overlap and cannot be added up into a daily total.
-  // Activity is therefore compared as the average steps per reading: today so
-  // far against the 3 most recent days before today. A ratio of 1.0 means a
-  // normal day, which is how activity_ratio_3day is defined in the training data.
-
-  // Average steps per reading over the 3 most recent days before today
-  // (each day weighted equally). 0.0 when there is no earlier day yet.
   static double threeDayAverageFromSummaries(List<DailySummary> summaries, {DateTime? now}) {
     final today = DailySummary.dayKey(now ?? DateTime.now());
     final earlier = summaries
@@ -281,8 +262,6 @@ class HealthIntelligenceService {
     return null;
   }
 
-  // Today's average steps per reading divided by the 3-day average.
-  // null when there is no earlier day, or no reading today, to compare.
   static double? activityRatioFromSummaries(List<DailySummary> summaries, {DateTime? now}) {
     final at = now ?? DateTime.now();
     final threeDayAverage = threeDayAverageFromSummaries(summaries, now: at);
@@ -299,8 +278,6 @@ class HealthIntelligenceService {
   }) =>
       activityRatioFromSummaries(DailySummary.fromReadings([...historicalData, current]), now: now);
 
-  // Low Activity Warning: today's activity more than 35% below the 3-day average.
-  // Uses [summaries] (from the server) when given, otherwise builds them from the readings.
   static HealthAlert? detectLowActivity(
     CollarData currentData,
     List<CollarData> historicalData, {

@@ -29,7 +29,6 @@ class HealthScreen extends StatefulWidget {
 }
 
 class _HealthScreenState extends State<HealthScreen> {
-
   // Opens the form to add or edit a medication.
   void _showMedicationForm({Medication? medication, required String petId}) {
     if (petId.isEmpty) {
@@ -203,8 +202,6 @@ class _HealthContent extends StatelessWidget {
       stream: petId.isNotEmpty ? CollarDataService.getLatestCollarDataForPet(petId) : Stream.value(null),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          // Surfaces Firestore errors (e.g. a missing composite index) instead
-          // of silently rendering as "no data".
           debugPrint('CollarData stream error: ${snapshot.error}');
           return _InfoCard(
             child: Padding(

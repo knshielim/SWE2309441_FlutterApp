@@ -1,31 +1,4 @@
-"""
-Trains and evaluates the Random Forest health-state classifier for HavaPaw.
-
-Matches proposal Phase 4 & 6-7:
-- Random Forest classifier with individualized (per-pet) baselines
-- Evaluation via k-fold cross-validation, target >=95% accuracy
-- Feature importance reported for the FYP write-up
-
-CHANGES FROM THE ORIGINAL
-- Splits are GROUPED BY PET (pet_id): no pet has readings in both the training and
-  test data. The original reading-level split let the same synthetic pet appear on
-  both sides, which inflates accuracy.
-- Paths are relative to this file, so it runs on any machine.
-- The report labels the numbers as internal validation on simulated data.
-- Optional: --real-csv evaluates the trained model on REAL labelled readings (for
-  example from your own collar) that were never used for training.
-
-USAGE (from the havapaw_ml folder):
-    python train_random_forest.py
-    python train_random_forest.py --real-csv path/to/real_readings.csv
-
-The real-readings CSV needs these columns (same meaning as the training features):
-    species (dog/cat), heart_rate, temperature, spo2, activity_index, steps,
-    activity_ratio_3day, hr_deviation_pct, temp_deviation_c, age, weight,
-    label (resting/active/stressed/anomaly or 0-3; empty rows are skipped)
-export_collar_readings.py writes this file from Firestore.
-"""
-
+# Random Forest training and evaluation
 import argparse
 import json
 from pathlib import Path
@@ -90,7 +63,6 @@ def calibration_summary():
 
 def evaluate_real(clf, species_encoder, csv_path):
     real = pd.read_csv(csv_path, keep_default_na=False)
-    # Labels may be names (resting/active/stressed/anomaly) or ids; empty rows are unlabelled.
     names = {n: i for i, n in enumerate(LABEL_NAMES)}
     real["label"] = real["label"].astype(str).str.strip().str.lower().map(
         lambda v: names.get(v, int(v) if v.isdigit() else None))

@@ -3,18 +3,6 @@ import 'package:havapaw/models/pet.dart';
 import 'package:havapaw/models/collar_data.dart';
 import 'package:havapaw/services/ml_health_classifier_service.dart';
 
-// NOTE ON SCOPE: MLHealthClassifierService.classify() calls the TFLite
-// interpreter via dart:ffi, which needs native platform channels that don't
-// exist under plain `flutter test` (the Dart VM has no way to load
-// pet_health_classifier.tflite the way a real device does). That path needs
-// an integration test on a real device/emulator instead (see
-// integration_test/ if/when added).
-//
-// What CAN be fully unit tested -- and is, here -- is everything upstream
-// of the interpreter call: buildFeatureVector() and normalizeFeatures() are
-// both pure functions with no I/O, so every branch of the feature
-// engineering logic is covered without needing a device at all.
-
 Pet _pet({String type = 'dog', double weight = 20.0, int ageYears = 4}) {
   final birthday = DateTime.now().subtract(Duration(days: 365 * ageYears + 10));
   return Pet(
@@ -116,7 +104,7 @@ void main() {
     });
 
     test('a heart rate exactly at the calibrated baseline gives ~0% deviation', () {
-      final pet = _pet(type: 'dog', weight: 20.0, ageYears: 4); // medium dog, no history -> pure population prior (~90bpm)
+      final pet = _pet(type: 'dog', weight: 20.0, ageYears: 4);
       final reading = _reading(heartRate: 90, temperature: 38.5);
       final features = MLHealthClassifierService.buildFeatureVector(reading, pet, []);
       // index 6 = hr_deviation_pct
@@ -133,8 +121,6 @@ void main() {
     test('activity ratio is clipped so a runaway spike does not blow out the feature', () {
       final pet = _pet();
       final now = DateTime.now();
-      // historical average will be very small (10 steps/day), so a large
-      // current step count would otherwise produce a huge ratio
       final history = [_reading(steps: 10, timestamp: now.subtract(const Duration(days: 1)))];
       final reading = _reading(heartRate: 90, temperature: 38.5, steps: 50000, timestamp: now);
       final features = MLHealthClassifierService.buildFeatureVector(reading, pet, history);

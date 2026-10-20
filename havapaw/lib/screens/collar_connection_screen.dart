@@ -311,8 +311,6 @@ class _CollarConnectionScreenState extends State<CollarConnectionScreen> {
     });
 
     try {
-      // Secret the collar will send with every upload. It is registered in
-      // Firestore (readable only by the Cloud Function) before the collar gets it.
       final token = _generateDeviceToken();
       final collarId = await Esp32BleService.provisionAndBind(
         collar: device,
@@ -338,8 +336,6 @@ class _CollarConnectionScreenState extends State<CollarConnectionScreen> {
 
       await PetService.updatePet(pet.id!, {'collarId': collarId});
 
-      // Seed a lightweight "connected" reading so Health leaves the empty state
-      // until the ESP32 posts its first real sample over WiFi.
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -370,7 +366,7 @@ class _CollarConnectionScreenState extends State<CollarConnectionScreen> {
     }
   }
 
-  /// 32 random bytes as 64 hex characters.
+  // 32 random bytes as 64 hex characters.
   String _generateDeviceToken() {
     final rng = Random.secure();
     return List.generate(32, (_) => rng.nextInt(256))

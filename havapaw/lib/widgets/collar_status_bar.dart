@@ -6,13 +6,9 @@ import 'package:flutter/material.dart';
 import '../models/collar_data.dart';
 import '../theme/app_theme.dart';
 
-// Shows how fresh the latest collar reading is ("Updated 2 min ago"), whether
-// the collar is still sending (it uploads every 30 s), and its battery level.
 class CollarStatusBar extends StatefulWidget {
   final CollarData reading;
 
-  // No upload for this long means the collar is off, out of Wi-Fi range or
-  // waiting for skin contact.
   static const Duration staleAfter = Duration(minutes: 5);
 
   const CollarStatusBar({super.key, required this.reading});

@@ -47,8 +47,6 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
       final pet = await PetService.getPetById(widget.petId);
       setState(() => _pet = pet);
 
-      // Latest readings plus the server's daily summaries (instead of
-      // downloading the whole history; see DailySummaryService).
       final recentData = await CollarDataService.getCollarDataForPet(widget.petId, limit: 50).first;
       final summaries = await DailySummaryService.streamForPet(widget.petId).first;
       final historicalData = recentData;
@@ -65,8 +63,6 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
         // Generate health summary
         final summary = AIHealthInsightsService.generateHealthSummary(pet, insights);
 
-        // Real Random Forest -> TFLite classification of the latest reading
-        // (see lib/services/ml_health_classifier_service.dart)
         final mlResult = await MLHealthClassifierService.classify(
           recentData.first,
           pet,
@@ -354,10 +350,6 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
   }
 }
 
-/// Displays the live Random Forest / TFLite classification result: the
-/// predicted activity state and the model's confidence, with a small bar
-/// chart of all four class probabilities so the reasoning is transparent
-/// rather than a black-box label.
 class _MLPredictionCard extends StatelessWidget {
   final MLClassificationResult result;
   final String petName;
@@ -732,9 +724,6 @@ class _AIQueryCardState extends State<_AIQueryCard> {
     });
 
     try {
-      // Real GPT-4 Virtual Vet call via Firebase Cloud Function
-      // (see lib/services/virtual_vet_service.dart), grounded in the
-      // on-device Random Forest / TFLite classification.
       final advice = await VirtualVetService.getAdvice(
         pet: pet,
         reading: reading,

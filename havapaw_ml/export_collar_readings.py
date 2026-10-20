@@ -1,34 +1,4 @@
-"""
-Exports real collar readings from Firestore to a CSV for testing the Random
-Forest on real data (train_random_forest.py --real-csv).
-
-Each row is one collar reading with the 11 model features computed the same way
-the app computes them (lib/services/ml_health_classifier_service.dart,
-health_intelligence_service.dart and baseline_calibration_service.dart). Only
-readings up to that moment are used, so each row shows what the app would have
-seen at the time.
-
-The `label` column is left empty for you to fill in from your observation notes:
-    resting, active, stressed, anomaly   (or 0, 1, 2, 3)
-Rows you leave empty are ignored by --real-csv.
-
-Labelling by time range (optional): pass --labels with a CSV like
-    pet,start,end,label
-    Hava,2026-10-21 14:00,2026-10-21 15:00,resting
-    Hava,2026-10-21 17:00,2026-10-21 17:30,active
-`pet` is the pet's name or id; times are local time (--tz).
-
-SETUP (once)
-    pip install firebase-admin pandas
-    Firebase console -> Project settings -> Service accounts -> Generate new
-    private key. Save the JSON somewhere OUTSIDE the repo and never commit it.
-
-USAGE (from the havapaw_ml folder)
-    python export_collar_readings.py --key path/to/service-account.json --email you@example.com
-    python export_collar_readings.py --key key.json --uid <uid> --pet Hava --since 2026-10-20
-    python export_collar_readings.py --key key.json --email you@example.com --labels my_labels.csv
-"""
-
+# Exports real collar readings from Firestore to CSV
 import argparse
 from collections import defaultdict
 from datetime import datetime
@@ -44,7 +14,7 @@ FEATURE_COLUMNS = [
 ]
 LABEL_NAMES = ["resting", "active", "stressed", "anomaly"]
 
-# --- constants mirrored from the Dart app ------------------------------------
+# constants mirrored from the Dart app
 LEARNING_PERIOD_DAYS = 3          # HealthIntelligenceService.learningPeriodDays
 PRIOR_PSEUDO_DAYS = 30.0          # BaselineCalibrationService._priorPseudoDays
 RESTING_STEPS_CUTOFF = 150        # BaselineCalibrationService._restingStepsCutoff
@@ -52,7 +22,7 @@ DEFAULT_SPO2 = 97.5               # MLHealthClassifierService.buildFeatureVector
 ACTIVITY_RATIO_CLIP = 5.0
 
 
-# --- pet profile (HealthIntelligenceService) ---------------------------------
+# pet profile (HealthIntelligenceService)
 def pet_age(birthday, at):
     try:
         b = datetime.fromisoformat(str(birthday)[:10])
@@ -100,11 +70,8 @@ def temperature_threshold(pet, at):
     return min(max(t, 38.0), 41.0)
 
 
-# --- features for every reading of one pet -----------------------------------
+# features for every reading of one pet
 def build_rows(pet, readings, tz):
-    """readings: dicts with timestamp (aware datetime), heartRate, temperature,
-    bloodOxygen, steps, accelerometerX/Y/Z, id. Returns one dict per reading that
-    has both heart rate and temperature, in time order."""
     readings = sorted(readings, key=lambda r: r["timestamp"])
     steps_by_day = defaultdict(list)         # day -> steps of each reading
     resting_hr_by_day = defaultdict(list)    # day -> heart rates of resting readings
@@ -185,7 +152,7 @@ def apply_label_ranges(df, labels_csv):
     return df
 
 
-# --- Firestore ----------------------------------------------------------------
+# Firestore
 def parse_timestamp(value):
     if value is None:
         return None
@@ -236,7 +203,7 @@ def load_from_firestore(key, uid, email, pet_filter):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description="Export collar readings from Firestore to CSV")
     ap.add_argument("--key", required=True, help="Firebase service-account JSON (keep it out of the repo)")
     who = ap.add_mutually_exclusive_group(required=True)
     who.add_argument("--uid", help="Firebase Auth uid of the account that owns the pets")

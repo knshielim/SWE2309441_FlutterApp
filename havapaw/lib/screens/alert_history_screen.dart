@@ -4,9 +4,6 @@ import '../theme/app_theme.dart';
 import '../services/alert_history_service.dart';
 import '../widgets/collar_status_bar.dart';
 
-// Past push alerts (saved by the server in users/{uid}/alerts), with a
-// "useful / not useful" rating the owner can give each one. The ratings are
-// the alert-relevance measure for the evaluation.
 class AlertHistoryScreen extends StatelessWidget {
   const AlertHistoryScreen({super.key});
 

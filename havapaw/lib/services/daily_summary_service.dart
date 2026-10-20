@@ -2,8 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/daily_summary.dart';
 
-// Reads the per-day summaries the server keeps for each pet
-// (users/{uid}/pets/{petId}/dailyStats/{YYYY-MM-DD}, written by onCollarReading).
 class DailySummaryService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;

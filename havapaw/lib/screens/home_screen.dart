@@ -479,8 +479,6 @@ class _HomeTabState extends State<_HomeTab> {
                       stream: pet.id != null ? CollarDataService.getLatestCollarDataForPet(pet.id!) : Stream.value(null),
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
-                          // Surfaces Firestore errors (e.g. a missing composite
-                          // index) instead of silently rendering as "no data".
                           debugPrint('CollarData stream error: ${snapshot.error}');
                           return _SectionCard(
                             child: Padding(

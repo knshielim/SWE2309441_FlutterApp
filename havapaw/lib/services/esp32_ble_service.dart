@@ -7,7 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'collar_ble_protocol.dart';
 
-/// A BLE collar seen during scanning.
+// A BLE collar seen during scanning.
 class DiscoveredCollar {
   final String remoteId;
   final String name;
@@ -22,7 +22,7 @@ class DiscoveredCollar {
   });
 }
 
-/// Payload written to the ESP32 over BLE so it can join WiFi and write Firestore.
+// Payload written to the ESP32 over BLE so it can join WiFi and write Firestore.
 class CollarProvisionPayload {
   final String wifiSsid;
   final String wifiPassword;
@@ -47,7 +47,7 @@ class CollarProvisionPayload {
       });
 }
 
-/// Real BLE scan / connect / WiFi-provision flow for HavaPaw ESP32 collars.
+// Real BLE scan / connect / WiFi-provision flow for HavaPaw ESP32 collars.
 class Esp32BleService {
   Esp32BleService._();
 
@@ -63,7 +63,7 @@ class Esp32BleService {
     }
   }
 
-  /// Requests platform permissions needed for BLE scanning.
+  // Requests platform permissions needed for BLE scanning.
   static Future<bool> ensurePermissions() async {
     final permissions = <Permission>[
       Permission.bluetoothScan,
@@ -81,7 +81,7 @@ class Esp32BleService {
     return scanOk && connectOk && locationOk;
   }
 
-  /// Starts a scan and emits the growing list of likely collar devices.
+  // Starts a scan and emits the growing list of likely collar devices.
   static Stream<List<DiscoveredCollar>> scan({
     Duration timeout = const Duration(seconds: 12),
   }) async* {
@@ -123,8 +123,6 @@ class Esp32BleService {
           if (!hasService) continue;
         } else if (!CollarBleProtocol.isLikelyCollarName(name) &&
             name.trim().isNotEmpty) {
-          // Show other named ESP32-like devices; skip unrelated phones/watches
-          // unless name looks collar-related.
           if (!name.toUpperCase().contains('ESP32') &&
               !name.toUpperCase().contains('HAVAPAW') &&
               !name.toUpperCase().contains('COLLAR')) {
@@ -161,7 +159,7 @@ class Esp32BleService {
     if (!controller.isClosed) await controller.close();
   }
 
-  /// One-shot helper: scan for [timeout] and return whatever was found.
+  // One-shot helper: scan for [timeout] and return whatever was found.
   static Future<List<DiscoveredCollar>> scanOnce({
     Duration timeout = const Duration(seconds: 12),
   }) async {
@@ -233,16 +231,11 @@ class Esp32BleService {
     _scanSub = null;
   }
 
-  /// Connects over BLE, sends WiFi + Firestore binding, waits for status.
-  /// Returns the device id to store on the pet as `collarId`.
   static Future<String> provisionAndBind({
     required DiscoveredCollar collar,
     required CollarProvisionPayload payload,
     Duration timeout = const Duration(seconds: 45),
 
-    /// Called once the collar's real device id is known and before the
-    /// configuration (including the secret token) is written to it. Use it to
-    /// register the token server-side so the collar's first upload is accepted.
     Future<void> Function(String deviceId)? onDeviceIdResolved,
   }) async {
     await stopScan();

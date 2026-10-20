@@ -3,8 +3,6 @@ import 'package:havapaw/models/pet.dart';
 import 'package:havapaw/models/collar_data.dart';
 import 'package:havapaw/services/health_intelligence_service.dart';
 
-// Test fixture helper: builds a Pet with sensible defaults, overriding only
-// what a given test cares about.
 Pet _pet({
   String type = 'dog',
   double weight = 20.0,

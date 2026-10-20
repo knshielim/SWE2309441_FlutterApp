@@ -42,8 +42,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(key, value);
 
-    // Mirror the alert switches to Firestore: the server sends the pushes, so it
-    // needs to know which ones the owner has turned off.
     const cloudKeys = {
       'push_notifications': 'push',
       'health_alerts': 'health',

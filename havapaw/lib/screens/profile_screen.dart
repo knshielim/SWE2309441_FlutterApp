@@ -21,7 +21,6 @@ class ProfileScreen extends StatefulWidget {
 }
  
 class _ProfileScreenState extends State<ProfileScreen> {
- 
   // Opens the form to add or edit a pet.
   void _showPetForm({Pet? pet}) {
     showModalBottomSheet(

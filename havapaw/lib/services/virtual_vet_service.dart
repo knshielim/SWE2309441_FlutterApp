@@ -17,12 +17,6 @@ class VirtualVetAdvice {
   });
 }
 
-/// Calls the `generateVirtualVetAdvice` Cloud Function, which wraps the
-/// GPT-4 API server-side (proposal Phase 5). Combines the pet's profile with
-/// the latest sensor reading and the on-device ML classification
-/// (MLHealthClassifierService) so the LLM's advice is grounded in the same
-/// individualized-baseline reasoning the rest of the app uses, instead of
-/// generic template text.
 class VirtualVetService {
   static final _functions = FirebaseFunctions.instance;
 

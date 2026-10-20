@@ -1,29 +1,4 @@
-/*
-  HavaPaw - Phase 1.3: Duty-Cycle Sleep + Battery Monitoring + Firebase Upload
-  -----------------------------------------------------------------------------
-  Each wake cycle:
-    1. Read battery level
-    2. Listen to GPS for a short window
-    3. Read MAX30102, MPU6050, DS18B20
-    4. Connect to WiFi + Firebase Realtime Database, upload readings
-    5. Turn WiFi off and go back to deep sleep
-
-  Required libraries (Library Manager):
-    - SparkFun MAX3010x Pulse and Proximity Sensor Library
-    - Adafruit MPU6050 (+ Adafruit Unified Sensor, Adafruit BusIO)
-    - OneWire
-    - DallasTemperature
-    - TinyGPSPlus
-    - Firebase Arduino Client Library for ESP8266 and ESP32 (by Mobizt)
-
-  Notes:
-    - Deep sleep restarts the chip every cycle: setup() runs fresh, loop() is unused.
-    - WiFi + Firebase sign-in is the most power-hungry step (several seconds).
-      Raise UPLOAD_EVERY_N_WAKES to upload less often and save battery.
-    - GPS rarely gets a fix inside a short window. The last known good position
-      is kept in RTC memory and re-sent (flagged as stale) when there is no fresh fix.
-*/
-
+// Old bench test sketch (not used by the app)
 #include <Wire.h>
 #include <WiFi.h>
 #include <HardwareSerial.h>
@@ -37,13 +12,13 @@
 #include <addons/TokenHelper.h>
 #include "secrets.h"
 
-// ---- Pin Definitions ----
+// Pin Definitions
 #define ONE_WIRE_BUS     4
 #define GPS_RX_PIN       16
 #define GPS_TX_PIN       17
 #define BATTERY_ADC_PIN  34   // ADC1 pin - safe to use while WiFi is on
 
-// ---- Config ----
+// Config
 #define SLEEP_DURATION_SEC      30
 #define UPLOAD_EVERY_N_WAKES    1      // 1 = upload every wake; 4 = every 4th wake, etc.
 #define LOW_BATTERY_THRESHOLD   15.0   // percent
@@ -53,7 +28,7 @@
 #define FIREBASE_TIMEOUT_MS     10000
 #define KEEP_HISTORY            true   // also push each reading to /history
 
-// ---- Objects ----
+// Objects
 MAX30105 maxSensor;
 Adafruit_MPU6050 mpu;
 OneWire oneWire(ONE_WIRE_BUS);
@@ -65,13 +40,13 @@ FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
-// ---- Survive deep sleep ----
+// Survive deep sleep
 RTC_DATA_ATTR int    bootCount = 0;
 RTC_DATA_ATTR bool   hasLastFix = false;
 RTC_DATA_ATTR double lastLat = 0;
 RTC_DATA_ATTR double lastLng = 0;
 
-// ---- Reading container ----
+// Reading container
 struct CollarReading {
   long   ir = 0, red = 0;
   float  ax = 0, ay = 0, az = 0;
@@ -83,9 +58,6 @@ struct CollarReading {
   bool   maxOk = false, mpuOk = false;
 };
 
-// ============================================================
-//  Battery
-// ============================================================
 float readBatteryPercent() {
   // Average a few samples to reduce ADC noise
   uint32_t sum = 0;
@@ -102,9 +74,6 @@ float readBatteryPercent() {
   return constrain(percent, 0, 100);
 }
 
-// ============================================================
-//  Sensors
-// ============================================================
 void initSensors(CollarReading &r) {
   Wire.begin(21, 22);
 
@@ -182,9 +151,6 @@ void printReading(const CollarReading &r) {
   }
 }
 
-// ============================================================
-//  WiFi + Firebase
-// ============================================================
 bool connectWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -258,9 +224,6 @@ bool uploadReading(const CollarReading &r) {
   return true;
 }
 
-// ============================================================
-//  Main
-// ============================================================
 void setup() {
   Serial.begin(115200);
   delay(200);
@@ -308,5 +271,4 @@ void setup() {
 }
 
 void loop() {
-  // Not used - deep sleep restarts from setup() every cycle
 }

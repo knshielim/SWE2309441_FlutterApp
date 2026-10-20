@@ -8,7 +8,6 @@ class CollarDataService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Returns the most recent collar reading for a specific pet from actual device only
   static Stream<CollarData?> getLatestCollarDataForPet(String petId) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value(null);
@@ -67,9 +66,6 @@ class CollarDataService {
     await _db.collection('users').doc(uid).collection('collarData').add(dataToSave);
   }
 
-  // Returns the most recent [limit] collar readings for a pet (newest first),
-  // from the actual device only. The collar uploads every 30 s, so always pass
-  // a limit; use DailySummaryService for anything that needs days of history.
   static Stream<List<CollarData>> getCollarDataForPet(String petId, {int limit = 50}) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value([]);

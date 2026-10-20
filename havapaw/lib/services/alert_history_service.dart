@@ -1,8 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// One push alert saved by the server (users/{uid}/alerts, see sendPush in
-// functions/index.js), with the owner's feedback on whether it was useful.
 class AlertRecord {
   final String id;
   final String petId;
@@ -60,8 +58,6 @@ class AlertHistoryService {
         .map((s) => s.docs.map((d) => AlertRecord.fromMap(d.data(), d.id)).toList());
   }
 
-  // Records whether the owner found an alert useful (null clears it). Used to
-  // measure alert relevance in the evaluation.
   static Future<void> setFeedback(String alertId, String? feedback) async {
     final col = _alerts();
     if (col == null) return;

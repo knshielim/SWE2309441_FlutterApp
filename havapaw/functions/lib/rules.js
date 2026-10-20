@@ -1,12 +1,5 @@
 "use strict";
-/**
- * Pure alert rules used by the Cloud Functions.
- *
- * These mirror the thresholds in the Flutter app
- * (lib/services/health_intelligence_service.dart) so that a push notification
- * and the in-app health screen agree. No Firebase imports here so the logic
- * can be unit tested with `node --test`.
- */
+// Alert rules
 
 const DOG_MAX_HR = 140;
 const CAT_MAX_HR = 220;
@@ -58,10 +51,6 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 
-/**
- * Health alerts for a single reading. Same conditions as the app:
- * high heart rate, stress (high HR with fewer than 100 steps), high temperature.
- */
 function healthAlerts(reading, pet, now = new Date()) {
   const out = [];
   const maxHr = heartRateThreshold(pet, now);
@@ -97,14 +86,12 @@ function healthAlerts(reading, pet, now = new Date()) {
   return out;
 }
 
-/** The single most severe health alert, or null. Avoids two pushes for one reading. */
 function topHealthAlert(reading, pet, now = new Date()) {
   const all = healthAlerts(reading, pet, now);
   if (all.length === 0) return null;
   return all.reduce((a, b) => (b.severity > a.severity ? b : a));
 }
 
-/** True when the reading has a position outside every active zone. null if unknown. */
 function isOutsideAllZones(reading, zones) {
   if (!isNum(reading.latitude) || !isNum(reading.longitude)) return null;
   if (!zones || zones.length === 0) return null;
@@ -113,16 +100,6 @@ function isOutsideAllZones(reading, zones) {
   );
 }
 
-/* ---------------------------------------------------------------------------
- * Personal baseline and deviation index (proposal Figure 3).
- *
- * For each pet the server keeps per-day heart-rate sums, split into resting and
- * active readings (steps in the collar's 5-minute window below/above
- * REST_STEPS), so a walk is never compared with a nap. The baseline is the mean
- * over the previous BASELINE_DAYS days (today excluded). A reading whose heart
- * rate differs from the matching baseline by DEVIATION_THRESHOLD or more is a
- * deviation.
- * ------------------------------------------------------------------------- */
 const REST_STEPS = 100;
 const BASELINE_DAYS = 3;
 const MIN_BASELINE_SAMPLES = 60; // about 30 minutes of uploads in that state
@@ -137,7 +114,6 @@ function activityState(reading) {
   return reading.steps < REST_STEPS ? "rest" : "active";
 }
 
-/** Returns a new daily-stats map with this reading added; keeps the last BASELINE_DAYS + 1 days. */
 function addToDailyStats(daily, reading, today) {
   const out = { ...(daily || {}) };
   const st = activityState(reading);
@@ -151,7 +127,6 @@ function addToDailyStats(daily, reading, today) {
   return Object.fromEntries(keep.map((k) => [k, out[k]]));
 }
 
-/** Mean heart rate for one activity state over the previous days, or null if too little data. */
 function baselineHeartRate(daily, today, state) {
   const days = Object.keys(daily || {})
     .filter((k) => k < today)
@@ -167,10 +142,6 @@ function baselineHeartRate(daily, today, state) {
   return { mean: sum / n, samples: n, days: days.length };
 }
 
-/**
- * Deviation of this reading from the pet's own baseline.
- * Returns null when there is no baseline yet or the deviation is below the threshold.
- */
 function deviationCheck(reading, daily, today) {
   const state = activityState(reading);
   if (!state || !isNum(reading.heartRate)) return null;
@@ -181,14 +152,6 @@ function deviationCheck(reading, daily, today) {
   return { state, baselineHr: base.mean, deviation, baselineDays: base.days };
 }
 
-/* ---------------------------------------------------------------------------
- * Per-day summary the app reads instead of downloading every reading.
- * Stored at users/{uid}/pets/{petId}/dailyStats/{YYYY-MM-DD} (local day).
- * Matches the app's maths (HealthIntelligenceService / BaselineCalibrationService):
- *  - steps: every reading that has steps (average steps per reading per day)
- *  - resting heart rate: readings with a heart rate and at most
- *    APP_RESTING_STEPS_CUTOFF steps (missing steps count as 0)
- * ------------------------------------------------------------------------- */
 const APP_TIME_ZONE = "Asia/Kuala_Lumpur";
 const APP_RESTING_STEPS_CUTOFF = 150;
 
@@ -198,7 +161,6 @@ function localDayKey(ms, timeZone = APP_TIME_ZONE) {
     .format(new Date(ms));
 }
 
-/** Field increments for this reading's daily summary, or null if it adds nothing. */
 function dailySummaryIncrements(reading) {
   const inc = {};
   if (isNum(reading.steps)) {
@@ -212,10 +174,6 @@ function dailySummaryIncrements(reading) {
   return Object.keys(inc).length ? inc : null;
 }
 
-/**
- * Validates and cleans a reading sent by the collar. Unknown fields are dropped.
- * Returns { ok: true, value } or { ok: false, error }.
- */
 function sanitizeReading(body) {
   const num = (key, lo, hi, int = false) => {
     if (body[key] === undefined || body[key] === null) return undefined;

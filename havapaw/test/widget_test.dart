@@ -19,8 +19,6 @@ void main() {
     expect(find.text("Your Pet's Best Friend"), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-    // SplashScreen schedules navigation after 2.5s; elapse it so no timer
-    // is left pending when the test tears down.
     await tester.pump(const Duration(milliseconds: 2500));
     await tester.pumpAndSettle();
   });

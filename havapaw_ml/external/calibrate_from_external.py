@@ -1,41 +1,4 @@
-"""
-Calibrates HavaPaw's synthetic-data generator against real, public datasets.
-
-WHY THIS EXISTS
-No public dataset has the collar's full schema (heart rate + temperature + SpO2 +
-accelerometer + steps, labelled resting/active/stressed/anomaly), so the Random
-Forest is still trained on generated data. What the public datasets CAN do is
-replace guessed distributions in the generator with measured ones:
-
-  * Kaggle "Cat Activity Detection"  -> real accelerometer activity_index for cats
-                                         (resting vs active)
-  * Mendeley Data vxhx934tbn (dogs)  -> real accelerometer activity_index for dogs
-                                         (optional; neck sensor = collar position)
-  * Zenodo 8020390 (Invoxia dogs)    -> real resting heart rate by weight/age, used
-                                         to CHECK the generator's resting baselines
-  * Zenodo 19383015 (4 dogs, ECG RRI) -> heart rate before / during / after an
-                                         animal-assisted reading session, used to
-                                         CHECK calm heart rate and the 35% deviation
-                                         threshold (not used for training)
-
-activity_index follows the app: x^2 + y^2 + z^2 of ONE accelerometer sample, in g
-(HealthIntelligenceService.calculateActivityIndex). Resting is therefore about 1.0.
-
-USAGE (run from the havapaw_ml folder):
-    python external/calibrate_from_external.py
-    python external/calibrate_from_external.py --cat path/to/archive.zip --invoxia path/to/dataset.csv
-    python external/calibrate_from_external.py --mendeley-dir external/raw/mendeley
-    python external/calibrate_from_external.py --rri-dir external/raw/rri
-
-Sources whose raw files are missing keep their previous values from the existing
-external_calibration.json, so the datasets can be added one at a time.
-
-Raw data is NOT committed (hundreds of MB). Put it in external/raw/ (gitignored).
-The small output files ARE committed:
-    external/external_calibration.json        (read by data/generate_dataset.py)
-    external/external_calibration_report.md   (tables for the FYP report)
-"""
-
+# Reads the public datasets and writes external_calibration.json
 import argparse
 import ast
 import json
@@ -48,14 +11,12 @@ HERE = Path(__file__).resolve().parent
 RAW = HERE / "raw"
 
 Q = np.linspace(0, 100, 101)   # store 101 quantiles per distribution
-G2_CLIP = 16.0                 # MPU6050 at +/-4 g: |a|^2 cannot meaningfully exceed 16 per axis
-MIN_DOGS_FOR_HR_OVERRIDE = 5   # size classes with fewer dogs keep the literature value
+G2_CLIP = 16.0
+MIN_DOGS_FOR_HR_OVERRIDE = 5
 
-# --- label groupings (edit these if you disagree with a mapping) --------------
+# label groupings (edit these if you disagree with a mapping)
 CAT_RESTING = {"Resting"}
 CAT_ACTIVE = {"Walking", "Running"}
-# Grooming, Eating/Drinking, Scratching, Pooping/Urinating are excluded on purpose:
-# they are neither clearly resting nor clearly active.
 DOG_RESTING = ("lying", "sitting", "standing")
 DOG_ACTIVE = ("walking", "trotting", "galloping")
 # sniffing, synchronization and undefined rows are excluded.
@@ -77,9 +38,6 @@ LITERATURE_DOG_RESTING_HR = {"toy": 135, "small": 110, "medium": 90, "large": 75
 SIZE_ORDER = ["toy", "small", "medium", "large", "giant"]
 
 
-# ----------------------------------------------------------------------------
-# helpers
-# ----------------------------------------------------------------------------
 def _quantiles(x):
     return np.round(np.percentile(np.clip(x, 0, G2_CLIP), Q), 4).tolist()
 
@@ -115,9 +73,6 @@ def _activity_block(resting, active, extra=None):
     return block
 
 
-# ----------------------------------------------------------------------------
-# Kaggle cat dataset
-# ----------------------------------------------------------------------------
 def load_cat(path):
     df = pd.read_csv(path, usecols=["Acc_x", "Acc_y", "Acc_z", "label"])
     ai = df.Acc_x**2 + df.Acc_y**2 + df.Acc_z**2
@@ -127,9 +82,6 @@ def load_cat(path):
     return _activity_block(resting, active, extra={"label_counts": {k: int(v) for k, v in counts.items()}})
 
 
-# ----------------------------------------------------------------------------
-# Mendeley dog dataset (optional)
-# ----------------------------------------------------------------------------
 def load_mendeley(folder):
     needed = ["ANeck_x", "ANeck_y", "ANeck_z", "Behavior_1"]
     resting, active, dogs, files_used = [], [], set(), 0
@@ -138,9 +90,6 @@ def load_mendeley(folder):
         if not set(needed) <= header:
             continue  # e.g. DogInfo.csv
         cols = needed + (["DogID"] if "DogID" in header else [])
-        # DogMoveData.csv is large (100 Hz), so read it in chunks; chunksize is a
-        # multiple of 10, so taking every 10th row (-> 10 Hz) stays evenly spaced.
-        # A single-sample distribution is unaffected by this thinning.
         for df in pd.read_csv(f, usecols=cols, chunksize=500_000):
             df = df.iloc[::10]
             ai = df.ANeck_x**2 + df.ANeck_y**2 + df.ANeck_z**2
@@ -160,9 +109,6 @@ def load_mendeley(folder):
     return _activity_block(resting, active, extra={"n_dogs": len(dogs), "files_used": files_used})
 
 
-# ----------------------------------------------------------------------------
-# Invoxia dog vitals
-# ----------------------------------------------------------------------------
 def load_invoxia(path):
     df = pd.read_csv(path)
     rows = []
@@ -200,7 +146,7 @@ def load_invoxia(path):
         "n_segments": int(len(h)),
         "hr_percentiles_5_50_95": [round(float(v), 1) for v in np.percentile(h.hr, [5, 50, 95])],
         "by_size_class": by_class,
-        "dog_resting_hr_override": override,   # only used if USE_EXTERNAL_DOG_HR = True in the generator
+        "dog_resting_hr_override": override,
         "between_dog_sd": round(float(dogs.hr.std()), 1),
         "fit_hr_vs_weight_age": {
             "intercept": round(float(coef[0]), 2),
@@ -213,9 +159,6 @@ def load_invoxia(path):
     }
 
 
-# ----------------------------------------------------------------------------
-# Zenodo 19383015: ECG R-R intervals, 4 dogs x 4 trials x PRE / DARA / POST
-# ----------------------------------------------------------------------------
 DOG_ADULT_MAX_HR = 140        # fixed limit in rules.js / the app for an adult dog
 DEVIATION_THRESHOLD = 0.35    # rules.js DEVIATION_THRESHOLD
 
@@ -247,8 +190,6 @@ def load_rri(folder):
         for ph, g in df.groupby("phase")
     }
 
-    # The session (DARA) compared with the same dog's PRE recording of that trial:
-    # how often would HavaPaw's personal-baseline rule fire, and the fixed limit?
     piv = df.pivot_table(index=["dog", "trial"], columns="phase", values="hr_mean")
     change = (piv["DARA"] - piv["PRE"]) / piv["PRE"]
     per_trial = [
@@ -290,9 +231,6 @@ def load_rri(folder):
     }
 
 
-# ----------------------------------------------------------------------------
-# report
-# ----------------------------------------------------------------------------
 def write_report(path, cal):
     L = ["# External dataset calibration report", ""]
     L.append("Generated by `external/calibrate_from_external.py`. Values below come from real public data; "
@@ -369,7 +307,6 @@ def write_report(path, cal):
     path.write_text("\n".join(L) + "\n", encoding="utf-8")
 
 
-# ----------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cat", default=str(RAW / "Main_File_All_Activites.csv"), help="cat CSV (or the Kaggle .zip)")

@@ -1,29 +1,19 @@
+// Personal heart-rate baseline
 import '../models/collar_data.dart';
 import '../models/daily_summary.dart';
 import '../models/pet.dart';
 import 'health_intelligence_service.dart';
 
-/// Result of blending a pet's population-level baseline with its own
-/// accumulated collar data.
 class CalibratedBaseline {
-  /// Blended resting heart-rate baseline (bpm) -- population prior on day 0,
-  /// shifting toward the pet's own observed resting HR as data accumulates.
   final double hrBaseline;
 
-  /// Blended alert ceiling (bpm), shifted by the same offset as hrBaseline
-  /// so the margin between "normal" and "alert" learned from the literature
-  /// is preserved even as the baseline itself personalizes.
   final double hrThreshold;
 
-  /// Distinct calendar days of usable resting-state heart-rate data found.
+  // Distinct calendar days of usable resting-state heart-rate data found.
   final int daysOfData;
 
-  /// 0.0 (pure population prior, day 0) to 1.0 (30+ days, mostly the pet's
-  /// own data). Matches the proposal's "online learning ... first 30 days".
   final double maturity;
 
-  /// True if there was no usable historical data at all, so hrBaseline and
-  /// hrThreshold are exactly the population-formula values.
   final bool usedFallback;
 
   CalibratedBaseline({
@@ -35,43 +25,12 @@ class CalibratedBaseline {
   });
 }
 
-/// Implements proposal Phase 4's "online learning is applied during the
-/// first 30 days of usage to continuously refine the pet's baseline".
-///
-/// This is deliberately NOT model retraining. The TFLite classifier's
-/// weights are fixed; what personalizes over time is the BASELINE fed into
-/// its deviation features (see MLHealthClassifierService), using a
-/// Bayesian blend of the population-level formula (breed/size/age/weight,
-/// from HealthIntelligenceService -- the same one used to generate the
-/// synthetic training data) and the pet's own observed resting heart rate.
-///
-/// Why this design, not on-device model retraining:
-/// - Works identically on Android and iOS (tflite_flutter's on-device
-///   training support is Android-only and experimental)
-/// - Bounded and predictable: the population prior acts as a safety net,
-///   so a handful of noisy early readings can't swing the baseline wildly
-/// - Directly matches the proposal's actual wording ("refine the pet's
-///   baseline"), which is a statistical calibration claim, not a model
-///   architecture claim
-/// - ALSO solves the rare-breed cold-start problem better than retraining
-///   would: a pet whose true resting HR differs from the population
-///   formula (e.g. an atypical individual, or a breed whose physiology
-///   isn't well captured by the weight-based formula) self-corrects as its
-///   own real data accumulates and increasingly outweighs the prior --
-///   no breed label or retraining step required.
 class BaselineCalibrationService {
-  /// The proposal's stated personalization window.
+  // The proposal's stated personalization window.
   static const int calibrationWindowDays = 30;
 
-  /// How strongly the population prior counts, in day-equivalents. Setting
-  /// this equal to calibrationWindowDays means: at day 30 of real data, the
-  /// individual's own history and the population prior carry equal weight;
-  /// well past day 30, the pet's own data dominates.
   static const double _priorPseudoDays = 30.0;
 
-  /// Readings with more steps than DailySummary.restingStepsCutoff count as
-  /// active and are left out of the resting baseline, so a busy day doesn't
-  /// drag it upward.
   static CalibratedBaseline calibrate(Pet pet, List<CollarData> historicalData) =>
       calibrateFromSummaries(pet, DailySummary.fromReadings(historicalData));
 

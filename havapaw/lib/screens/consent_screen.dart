@@ -8,12 +8,9 @@ import 'home_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 
-/// Bump this when the data use described below changes; users are asked again.
+// Bump this when the data use described below changes; users are asked again.
 const int kConsentVersion = 1;
 
-/// Shows the consent screen once per account (and again if [kConsentVersion]
-/// changes), then continues to the home screen. The decision is stored at
-/// users/{uid}.consent so it follows the account across devices.
 class ConsentGate extends StatefulWidget {
   const ConsentGate({super.key});
 

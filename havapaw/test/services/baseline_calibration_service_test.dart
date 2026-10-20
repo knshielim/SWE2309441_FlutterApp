@@ -34,7 +34,7 @@ CollarData _activeReading(int heartRate, DateTime timestamp) {
     deviceId: 'device1',
     deviceName: 'Collar',
     heartRate: heartRate,
-    steps: 800, // above the resting cutoff -> excluded from baseline calc
+    steps: 800,
     timestamp: timestamp,
   );
 }
@@ -65,22 +65,18 @@ void main() {
     test('excludes active (high-step) readings from the resting baseline', () {
       final pet = _pet();
       final now = DateTime.now();
-      // All "active" readings at an unrealistic 220 bpm -- if these leaked
-      // into the resting baseline, hrBaseline would shoot up dramatically.
       final data = List.generate(
         5,
         (i) => _activeReading(220, now.subtract(Duration(days: i))),
       );
       final result = BaselineCalibrationService.calibrate(pet, data);
-      // No resting-state days found -> falls back to population prior, NOT
-      // an inflated baseline built from active readings.
       expect(result.usedFallback, isTrue);
     });
 
     test('blends toward the individual as resting data accumulates, and never overshoots it', () {
       final pet = _pet(type: 'dog', weight: 20.0, ageYears: 4); // population prior ~90bpm
       final now = DateTime.now();
-      const individualTrueRestingHr = 110; // this pet genuinely runs a bit faster than the formula predicts
+      const individualTrueRestingHr = 110;
 
       final oneDayData = [_restingReading(individualTrueRestingHr, now)];
       final oneDay = BaselineCalibrationService.calibrate(pet, oneDayData);
@@ -99,8 +95,6 @@ void main() {
       expect(thirtyDays.hrBaseline, greaterThan(populationPrior));
       expect(thirtyDays.hrBaseline, lessThanOrEqualTo(individualTrueRestingHr.toDouble()));
 
-      // ...and 30 days of consistent data should pull noticeably closer to
-      // the individual's true value than a single day does.
       final oneDayGap = (individualTrueRestingHr - oneDay.hrBaseline).abs();
       final thirtyDayGap = (individualTrueRestingHr - thirtyDays.hrBaseline).abs();
       expect(thirtyDayGap, lessThan(oneDayGap));

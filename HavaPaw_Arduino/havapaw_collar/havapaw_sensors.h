@@ -1,41 +1,10 @@
-/*
- * HavaPaw collar - real sensor reading (MAX30102, MPU6050, DS18B20)
- *
- * WIRING (ESP32 Dev Module, all sensors on 3.3 V)
- *   MAX30102 and MPU6050 share one I2C bus:   SDA = GPIO21, SCL = GPIO22
- *   DS18B20 data pin:                         GPIO4  (4.7 kOhm pull-up to 3.3 V)
- *   Battery divider (optional):               GPIO34 (set BATTERY_ADC_PIN below)
- *
- * ARDUINO LIBRARIES (Library Manager)
- *   SparkFun MAX3010x Pulse and Proximity Sensor Library   (works for MAX30102)
- *   Adafruit MPU6050   (also installs Adafruit Unified Sensor and Adafruit BusIO)
- *   OneWire
- *   DallasTemperature
- *   ArduinoJson (6.x)  - already used by the sketch
- *
- * HOW IT WORKS
- *   One FreeRTOS task owns the I2C bus and runs every 20 ms (50 Hz):
- *     - reads the MPU6050 (acceleration in g) and counts steps
- *     - drains the MAX30102 FIFO and recomputes heart rate / SpO2 about once a second
- *     - starts / collects DS18B20 temperature conversions without blocking
- *   The main loop only calls sensorsSnapshot() when it is time to post.
- *
- * The pure signal-processing classes (StepDetector, StepWindow, MedianFilter) have no
- * hardware dependencies, so they can be tested on a PC (define HAVAPAW_HOST_TEST).
- */
-
 #pragma once
+// Collar sensors: heart rate, SpO2, temperature, steps, battery
 #include <stdint.h>
 
-// ============================== TUNING CONSTANTS ==============================
-// Step detection from the neck accelerometer. Tune these on a real walk.
 static const float    STEP_THRESHOLD_G       = 0.25f;  // |a| must exceed its slow average by this much
 static const uint32_t MIN_STEP_INTERVAL_MS   = 250;    // ignore peaks closer than this (max ~4 steps/s)
 
-// 'steps' sent to the app = steps in the last STEP_WINDOW_MIN minutes.
-// The training data treats resting as ~20 and active as ~600 steps, which only makes
-// sense for a window of several minutes, so the window is 5 minutes here.
-// If you change this, regenerate the training data with matching step counts.
 static const int      STEP_WINDOW_MIN        = 5;
 static const uint32_t STEP_MIN_ELAPSED_MS    = 60000;  // do not report steps in the first minute after boot
 
@@ -45,8 +14,6 @@ static const int      HR_MIN_BPM             = 40;
 static const int      HR_MAX_BPM             = 250;
 static const uint32_t VITALS_VALID_FOR_MS    = 10000;  // a result older than this counts as invalid
 
-// DS18B20 measures collar/skin surface temperature, which reads LOWER than core body
-// temperature. Calibrate once against a vet thermometer and put the difference here.
 static const float    TEMP_OFFSET_C          = 0.0f;
 static const float    TEMP_MIN_C             = 20.0f;
 static const float    TEMP_MAX_C             = 45.0f;
@@ -54,10 +21,8 @@ static const float    TEMP_MAX_C             = 45.0f;
 // Optional battery monitor. -1 = not wired, the battery field is then not sent.
 static const int      BATTERY_ADC_PIN        = 34;     // -1 = no battery divider fitted
 static const float    BATTERY_DIVIDER_RATIO  = 2.0f;   // (R1+R2)/R2 of your divider
-// ==============================================================================
 
-
-// ------------------------------ pure logic ------------------------------------
+// pure logic
 
 // Median of the last 5 values: removes the occasional wild heart-rate result.
 struct MedianFilter {
@@ -82,7 +47,6 @@ struct MedianFilter {
   }
 };
 
-// Counts one step each time |a| rises STEP_THRESHOLD_G above its slow-moving average.
 struct StepDetector {
   float baseline = 1.0f;     // slow average of |a| (about 1 g, gravity)
   bool  aboveThreshold = false;
@@ -108,9 +72,6 @@ struct StepDetector {
   }
 };
 
-// Rolling count of steps over the last STEP_WINDOW_MIN one-minute bins (so the window
-// is between STEP_WINDOW_MIN-1 and STEP_WINDOW_MIN minutes long, because the current
-// minute is only partly filled).
 struct StepWindow {
   static const int BINS = 16;                       // supports windows up to 16 minutes
   static const uint32_t BIN_MS = 60000;
@@ -137,8 +98,6 @@ struct StepWindow {
 
   uint32_t elapsedMs(uint32_t nowMs) const { return nowMs - startMs; }
 
-  // Steps in the window. Until a full window has elapsed, the count is scaled up
-  // proportionally so early readings are comparable with later ones.
   uint32_t total(uint32_t nowMs) {
     advance(nowMs);
     uint32_t sum = 0;
@@ -150,8 +109,7 @@ struct StepWindow {
   }
 };
 
-
-// --------------------------- hardware (ESP32 only) ----------------------------
+// hardware (ESP32 only)
 #ifndef HAVAPAW_HOST_TEST
 
 #include <Arduino.h>
@@ -161,7 +119,7 @@ struct StepWindow {
 #include <Wire.h>
 #include <math.h>
 #include <string.h>
-#include "MAX30105.h"          // SparkFun library; the class also drives the MAX30102
+#include "MAX30105.h"
 #include "spo2_algorithm.h"
 #include <Adafruit_MPU6050.h>
 #include <OneWire.h>
@@ -197,7 +155,7 @@ static bool g_ppgOk = false, g_mpuOk = false, g_dsOk = false;
 static SemaphoreHandle_t g_mutex = nullptr;
 static SensorSnapshot g_snap;
 
-// ---- state used only by the sensor task ----
+// state used only by the sensor task
 static uint32_t g_irBuf[100], g_redBuf[100];
 static int g_bufFill = 0;              // samples currently held (0..100)
 static int g_newSinceCalc = 0;
@@ -244,7 +202,6 @@ static void ppgService(uint32_t nowMs) {
     }
     g_newSinceCalc++;
 
-    // Recompute once per second (25 new samples at 25 samples/s) when the window is full
     if (g_bufFill == 100 && g_newSinceCalc >= 25) {
       g_newSinceCalc = 0;
       int32_t spo2 = 0, hr = 0;
@@ -282,7 +239,6 @@ static void tempService(uint32_t nowMs) {
 static int readBatteryPct() {
   if (BATTERY_ADC_PIN < 0) return -1;
   float v = analogReadMilliVolts(BATTERY_ADC_PIN) * BATTERY_DIVIDER_RATIO / 1000.0f;
-  // Simple linear LiPo estimate (3.3 V empty .. 4.2 V full). The real curve is not linear.
   int pct = (int)((v - 3.3f) / (4.2f - 3.3f) * 100.0f + 0.5f);
   return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
 }
@@ -340,7 +296,6 @@ static void sensorTask(void *) {
   }
 }
 
-// Call once from setup(). Sensors that are missing are skipped; the rest keep working.
 static void sensorsBegin() {
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(400000);
@@ -354,8 +309,7 @@ static void sensorsBegin() {
 
   g_ppgOk = g_ppg.begin(Wire, I2C_SPEED_FAST);
   if (g_ppgOk) {
-    // 100 samples/s averaged by 4 = 25 samples/s, which is what the SpO2 algorithm assumes
-    g_ppg.setup(60 /*LED brightness*/, 4 /*average*/, 2 /*red+IR*/, 100 /*sps*/, 411 /*pulse width*/, 4096 /*ADC range*/);
+    g_ppg.setup(60 , 4 , 2 , 100 , 411 , 4096 );
   }
   Serial.println(g_ppgOk ? "MAX30102 OK" : "MAX30102 NOT FOUND (check SDA/SCL wiring)");
 

@@ -67,8 +67,6 @@ class PetLocationService {
       
       if (locationData.isEmpty) return null;
       final data = locationData.first;
-      // The collar's ingest function stores an ISO-8601 string; older
-      // documents may hold a Firestore Timestamp.
       final timestamp = data['timestamp'];
       if (timestamp is Timestamp) return timestamp.toDate();
       if (timestamp is String) return DateTime.tryParse(timestamp);

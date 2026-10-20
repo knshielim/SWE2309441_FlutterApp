@@ -1,28 +1,4 @@
-"""
-Knowledge-distills the trained Random Forest into a small feed-forward network,
-then converts that network to a genuine, standard-ops TFLite model for on-device
-inference in the Flutter app.
-
-WHY: tf.lite.TFLiteConverter cannot export a native RandomForest (sklearn or
-tensorflow_decision_forests) using standard TFLite ops -- both rely on custom
-SimpleML ops with no mobile-runtime support (see ERROR_NEEDS_CUSTOM_OPS). Model
-distillation -- training a small NN to reproduce a larger/more complex model's
-output distribution -- is a standard, documented technique (Hinton et al., 2015)
-and is what makes "Random Forest classifier ... converted into TensorFlow Lite
-format" (proposal Figure 3) actually work on a phone.
-
-The Random Forest remains the model that is trained and evaluated for the FYP
-report's accuracy figures; the distilled network is only the deployment artifact.
-
-CHANGES FROM THE ORIGINAL: paths are relative to this file, and the optional
---copy-to-app flag copies the new model and metadata into the Flutter app's
-assets so you cannot forget a file.
-
-USAGE (from the havapaw_ml folder; needs tensorflow installed):
-    python distill_to_tflite.py
-    python distill_to_tflite.py --copy-to-app
-"""
-
+# Converts the Random Forest into a TFLite model for the app
 import argparse
 import json
 import shutil

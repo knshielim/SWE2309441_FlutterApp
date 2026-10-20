@@ -1,3 +1,4 @@
+// Random Forest (TFLite) health classifier
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/services.dart' show rootBundle;
@@ -8,14 +9,11 @@ import '../models/pet.dart';
 import 'health_intelligence_service.dart';
 import 'baseline_calibration_service.dart';
 
-/// The four health/activity states the model predicts (matches proposal
-/// Figure 3: "Random Forest classifier ... classifies activity state:
-/// resting, active, stressed, anomaly").
 enum PetActivityState { resting, active, stressed, anomaly }
 
 class MLClassificationResult {
   final PetActivityState state;
-  final double confidence; // 0.0 - 1.0, softmax probability of the winning class
+  final double confidence;
   final Map<PetActivityState, double> allProbabilities;
 
   MLClassificationResult({
@@ -25,13 +23,6 @@ class MLClassificationResult {
   });
 }
 
-/// Runs on-device inference using a TensorFlow Lite model that was distilled
-/// from a Random Forest classifier trained on individualized (per-pet)
-/// physiological baselines. See havapaw_ml/ for the training pipeline:
-/// the Random Forest itself is trained + evaluated with 5-fold cross
-/// validation there; this service loads the compact TFLite network that was
-/// distilled from it for on-device deployment, since native Random Forest
-/// models don't export to standard TFLite ops.
 class MLHealthClassifierService {
   static Interpreter? _interpreter;
   static Map<String, dynamic>? _metadata;
@@ -47,8 +38,6 @@ class MLHealthClassifierService {
     PetActivityState.anomaly,
   ];
 
-  /// Loads the interpreter and normalization metadata. Safe to call
-  /// repeatedly; only loads once.
   static Future<void> ensureLoaded() async {
     if (_interpreter != null || _loading) return;
     _loading = true;
@@ -61,11 +50,6 @@ class MLHealthClassifierService {
     }
   }
 
-  /// Classifies a single collar reading for [pet], given its 3-day rolling
-  /// activity baseline (see HealthIntelligenceService.calculateActivityRatio).
-  /// Returns null if the model isn't loaded yet or data is insufficient.
-  /// Pass [summaries] (daily summaries from the server) to avoid needing the
-  /// full reading history; otherwise they are built from [historicalData].
   static Future<MLClassificationResult?> classify(
     CollarData reading,
     Pet pet,
@@ -105,18 +89,6 @@ class MLHealthClassifierService {
     );
   }
 
-  /// Builds the exact 11-feature vector the model was trained on:
-  /// [heart_rate, temperature, spo2, activity_index, steps,
-  ///  activity_ratio_3day, hr_deviation_pct, temp_deviation_c,
-  ///  age, weight, species_encoded]
-  ///
-  /// Public and side-effect free on purpose: this is the layer unit tests
-  /// exercise directly (see test/services/ml_health_classifier_service_test.dart).
-  /// The TFLite interpreter call in classify() needs native platform
-  /// channels that don't exist under plain `flutter test`, so that half of
-  /// the pipeline needs an integration test on a real device/emulator
-  /// instead -- this split keeps the parts that CAN be unit tested (all the
-  /// feature-engineering math) actually covered.
   static List<double>? buildFeatureVector(
     CollarData reading,
     Pet pet,
@@ -135,18 +107,10 @@ class MLHealthClassifierService {
       reading.accelerometerY,
       reading.accelerometerZ,
     );
-    // Fall back to a resting-equivalent magnitude (~1g^2) when accelerometer
-    // data is missing, matching the training distribution's resting baseline.
     final safeActivityIndex = activityIndex > 0 ? activityIndex : 1.0;
 
     final activityRatio = HealthIntelligenceService.activityRatioFromSummaries(days) ?? 1.0;
 
-    // Calibrated resting HR baseline (population prior blended with the
-    // pet's own history over the proposal's 30-day window -- see
-    // BaselineCalibrationService). The model was trained on deviation from
-    // the RESTING baseline, not the alert ceiling, so this must match
-    // resting_hr_baseline() in havapaw_ml/data/generate_dataset.py, not
-    // getIndividualizedHeartRateThreshold (which is the alert ceiling).
     final calibrated = BaselineCalibrationService.calibrateFromSummaries(pet, days);
     final tempThreshold = HealthIntelligenceService.getIndividualizedTemperatureThreshold(pet);
     final hrDeviationPct = ((heartRate - calibrated.hrBaseline) / calibrated.hrBaseline) * 100;
@@ -154,7 +118,7 @@ class MLHealthClassifierService {
 
     final age = HealthIntelligenceService.calculatePetAge(pet.birthday).toDouble();
     final weight = pet.weight;
-    final speciesEncoded = pet.type.toLowerCase() == 'dog' ? 1.0 : 0.0; // matches LabelEncoder alphabetical order (cat=0, dog=1)
+    final speciesEncoded = pet.type.toLowerCase() == 'dog' ? 1.0 : 0.0;
 
     return [
       heartRate,
@@ -162,7 +126,7 @@ class MLHealthClassifierService {
       spo2,
       safeActivityIndex,
       steps.toDouble(),
-      min(activityRatio, 5.0), // clip runaway ratios, matches training clip behavior
+      min(activityRatio, 5.0),
       hrDeviationPct,
       tempDeviation,
       age,
@@ -176,9 +140,6 @@ class MLHealthClassifierService {
     _interpreter = null;
   }
 
-  /// Z-score normalization using the training set's per-feature mean/std
-  /// (see havapaw_ml/models/feature_stats.json, baked into
-  /// assets/ml/model_metadata.json). Pure function -- unit tested directly.
   static List<double> normalizeFeatures(List<double> features, List<num> mean, List<num> std) {
     return List<double>.generate(features.length, (i) {
       final s = std[i].toDouble();

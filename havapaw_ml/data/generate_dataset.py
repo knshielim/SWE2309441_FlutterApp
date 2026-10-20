@@ -1,47 +1,4 @@
-"""
-Synthetic pet vitals dataset generator for HavaPaw's Random Forest health classifier.
-
-WHY SYNTHETIC: No public dataset exists with this exact sensor schema (continuous
-heart rate + SpO2 + temperature + tri-axis accelerometer + steps, labeled by
-health/activity state) for companion animals. This mirrors the approach taken by
-the papers already cited in the FYP literature review (e.g. Malar et al. 2026,
-Reyu & Princess 2024), who built individualized baselines from published breed/
-age/weight physiological ranges rather than a single off-the-shelf dataset.
-
-HYBRID CALIBRATION (new): if external/external_calibration.json exists (produced
-by external/calibrate_from_external.py from public datasets), the generator uses
-REAL measured accelerometer distributions for activity_index instead of guessed
-normal distributions. Everything else (steps, SpO2, temperature, stressed/anomaly
-states) remains synthetic. Without the JSON the generator behaves as before.
-
-Ranges used below are grounded in sources already cited in the proposal:
-- Dog HR 60-140 bpm, Cat HR 140-220 bpm (breedHeartRateRanges in
-  health_intelligence_service.dart, sourced from the FYP lit review)
-- Normal canine/feline body temperature ~37.5-39.2 degC (Klune et al., 2021;
-  general veterinary reference ranges)
-- SpO2 healthy resting range ~95-100% (MAX30102 datasheet / Saputra et al., 2021
-  sensor accuracy figures)
-- "Stress" defined per Malar et al. (2026): elevated HR + low activity
-- "Low activity" = today more than 35% below the 3-day rolling average (Malar et
-  al., 2026), i.e. activity_ratio_3day < 0.65 in the app
-  (HealthIntelligenceService.lowActivityThreshold)
-
-Classes (matches Figure 3 of the proposal - "Random Forest classifier ...
-classifies activity state: resting, active, stressed, anomaly"):
-    0 = resting     - low movement, HR/temp/SpO2 within individual baseline
-    1 = active       - elevated movement, HR appropriately elevated for exertion
-    2 = stressed      - elevated HR WITH low movement (context-aware distress)
-    3 = anomaly    - fever, hypoxia, tachycardia/bradycardia at rest, or dehydration
-                        signature (elevated HR + elevated temp + low activity)
-
-Each row represents one collar reading window, already paired with the pet's
-individualized baseline (computed the same way as
-HealthIntelligenceService.getIndividualizedHeartRateThreshold /
-getIndividualizedTemperatureThreshold in the Flutter app), so the model learns
-the SAME personalization logic the proposal promises rather than population-wide
-thresholds.
-"""
-
+# Training dataset generator (simulated, calibrated with real data)
 import json
 from pathlib import Path
 
@@ -53,15 +10,8 @@ ML_ROOT = HERE.parent
 OUTPUT_PATH = HERE / "pet_health_dataset.csv"
 CALIBRATION_PATH = ML_ROOT / "external" / "external_calibration.json"
 
-# --- External-data switches ----------------------------------------------------
-# Real measured activity_index distributions (cat: Kaggle, dog: Mendeley if provided).
 USE_EXTERNAL_ACTIVITY = True
-# Replace the literature dog RESTING heart-rate baselines with Invoxia medians for
-# size classes that have enough dogs. LEAVE False unless you also change
-# HealthIntelligenceService.getPopulationRestingHeartRateBaseline in the Dart app to
-# the same numbers - the app and generator must use identical baselines.
 USE_EXTERNAL_DOG_HR = False
-# --------------------------------------------------------------------------------
 
 RNG = np.random.default_rng(42)
 Q = np.linspace(0, 100, 101)
@@ -70,7 +20,7 @@ ACTIVITY_CLIP_MAX = 16.0
 SPECIES = ["dog", "cat"]
 SIZE_CLASS = ["toy", "small", "medium", "large", "giant"]  # widened to cover breed weight extremes
 
-N_PETS = 500          # distinct synthetic pet profiles (widened for the extra size classes)
+N_PETS = 500
 READINGS_PER_PET = 40  # readings per pet across states
 
 
@@ -88,7 +38,6 @@ HR_SD = (CAL or {}).get("invoxia", {}).get("between_dog_sd", 8.0)
 
 
 def individualized_hr_threshold(species, age, weight):
-    """Mirrors HealthIntelligenceService.getIndividualizedHeartRateThreshold (Dart)."""
     base_max = 220.0 if species == "cat" else 140.0
     if age > 8:
         base_max -= 10
@@ -100,7 +49,6 @@ def individualized_hr_threshold(species, age, weight):
 
 
 def individualized_temp_threshold(species, age):
-    """Mirrors HealthIntelligenceService.getIndividualizedTemperatureThreshold (Dart)."""
     threshold = 39.5
     if age > 10:
         threshold -= 0.3
@@ -111,7 +59,7 @@ def individualized_temp_threshold(species, age):
 
 def resting_hr_baseline(species, size_class, age, weight):
     if species == "cat":
-        base = RNG.normal(170, 14)  # widened spread to cover small kittens -> large Maine Coons
+        base = RNG.normal(170, 14)
     elif size_class in HR_OVERRIDE:
         base = RNG.normal(HR_OVERRIDE[size_class], HR_SD)  # measured (Invoxia)
     else:
@@ -132,7 +80,6 @@ def make_pet_profile(pet_id):
     size_class = RNG.choice(SIZE_CLASS) if species == "dog" else "n/a"
     age = float(np.clip(RNG.exponential(4.0), 0.15, 18))  # widened for very young/senior extremes
     if species == "cat":
-        # covers small kittens (~1.5kg) through large-breed cats like Maine Coon (~10-12kg)
         weight = float(np.clip(RNG.normal(4.5, 1.8), 1.5, 12))
     else:
         weight = {
@@ -157,18 +104,12 @@ def make_pet_profile(pet_id):
 
 
 def _legacy_activity_index(state):
-    """Original hand-picked distributions, used when no external calibration is loaded."""
     mean, sd = {"resting": (1.02, 0.03), "active": (1.6, 0.3),
                 "stressed": (1.03, 0.04), "anomaly": (1.05, 0.05)}[state]
     return float(max(0.9, RNG.normal(mean, sd)))
 
 
 def draw_activity_index(species, state):
-    """
-    Real measured distribution when available. Stressed and anomaly states are defined
-    as LOW-movement states, so they draw from the resting distribution.
-    Dogs fall back to the cat distribution if no dog data was supplied.
-    """
     key = "dog" if species == "dog" and "dog" in ACTIVITY_CAL else "cat"
     if key not in ACTIVITY_CAL:
         return _legacy_activity_index(state)
@@ -207,7 +148,7 @@ def sample_reading(profile, state):
         spo2 = RNG.normal(96.5, 1.3)
         activity_ratio = RNG.normal(0.35, 0.15)
 
-    else:  # anomaly: fever / hypoxia / dehydration signature / arrhythmia-like
+    else:
         subtype = RNG.choice(["fever", "hypoxia", "tachycardia_rest", "dehydration"])
         steps = int(max(0, RNG.normal(25, 20)))
         activity_ratio = RNG.normal(0.5, 0.2)
@@ -223,7 +164,7 @@ def sample_reading(profile, state):
             heart_rate = RNG.normal(hr_threshold + 30, 10)
             temperature = RNG.normal(base_temp, 0.2)
             spo2 = RNG.normal(96.0, 1.5)
-        else:  # dehydration signature: elevated HR + elevated temp + reduced activity
+        else:
             heart_rate = RNG.normal(hr_threshold + 10, 8)
             temperature = RNG.normal(temp_threshold + 0.6, 0.25)
             spo2 = RNG.normal(96.0, 1.5)

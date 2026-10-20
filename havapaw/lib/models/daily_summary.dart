@@ -1,11 +1,6 @@
 import 'collar_data.dart';
 
-// One day of a pet's collar readings, summed. The server keeps these at
-// users/{uid}/pets/{petId}/dailyStats/{YYYY-MM-DD} (onCollarReading), so the app
-// can compute 3-day and 30-day baselines from a few small documents instead of
-// downloading every reading. fromReadings builds the same summaries locally.
 class DailySummary {
-  // Readings with this many steps or fewer count as resting for the heart-rate baseline.
   static const int restingStepsCutoff = 150;
 
   final String date; // local day, YYYY-MM-DD
@@ -42,8 +37,6 @@ class DailySummary {
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
-  // Builds daily summaries from raw readings, oldest day first. Readings with
-  // the same id are counted once.
   static List<DailySummary> fromReadings(Iterable<CollarData> readings) {
     final seen = <String>{};
     final steps = <String, List<int>>{};

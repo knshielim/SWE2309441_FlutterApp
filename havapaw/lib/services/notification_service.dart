@@ -37,8 +37,6 @@ class NotificationService {
     await _initializeLocalNotifications();
     await _getFCMToken();
 
-    // Register this device's token under the signed-in user so the Cloud
-    // Function (onCollarReading) knows where to send alerts.
     FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) saveTokenForCurrentUser();
     });
@@ -122,8 +120,6 @@ class NotificationService {
     }
   }
 
-  // Removes this device's token for the current user (call before signing out)
-  // so alerts for that account stop arriving on this phone.
   static Future<void> removeTokenForCurrentUser() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final token = fcmToken;
