@@ -14,6 +14,12 @@ service cloud.firestore {
     // Per-device secret used by the collar to authenticate to ingestCollarData.
     // The app creates it during BLE provisioning; the token can never be read back
     // by a client, only by the Cloud Function.
+    // Emergency mode records (one per contact), readable only by the owner.
+    match /emergencyAlerts/{alertId} {
+      allow create: if request.auth != null && request.resource.data.ownerId == request.auth.uid;
+      allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
+    }
+
     match /deviceTokens/{deviceId} {
       allow create: if request.auth != null
         && request.resource.data.uid == request.auth.uid
