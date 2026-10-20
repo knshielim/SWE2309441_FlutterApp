@@ -334,5 +334,18 @@
   "wifi_connect_failed": "The collar could not join that WiFi network. Check the password and use 2.4 GHz WiFi.",
   "firebase_sync_failed": "The collar joined WiFi but could not sync to Firebase. Check Firestore rules.",
   "continue": "Continue",
-  "ok": "OK"
+  "ok": "OK",
+  "vet_disclaimer": "This is guidance only, not a diagnosis. Contact a vet if you are worried about your pet.",
+  "collar_updated_ago": "Updated {}",
+  "minutes_ago": "{} min ago",
+  "hours_ago": "{} h ago",
+  "days_ago": "{} d ago",
+  "collar_live": "Live",
+  "collar_no_recent_data": "No recent data",
+  "collar_battery_pct": "Battery {}%",
+  "alert_history": "Alert history",
+  "no_alerts_yet": "No alerts yet. Alerts sent to your phone will appear here.",
+  "was_alert_useful": "Was this alert useful?",
+  "useful": "Useful",
+  "not_useful": "Not useful"
 }

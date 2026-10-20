@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import '../models/collar_data.dart';
+import '../models/daily_summary.dart';
 import '../models/pet.dart';
 import 'health_intelligence_service.dart';
 import 'baseline_calibration_service.dart';
@@ -63,15 +64,18 @@ class MLHealthClassifierService {
   /// Classifies a single collar reading for [pet], given its 3-day rolling
   /// activity baseline (see HealthIntelligenceService.calculateActivityRatio).
   /// Returns null if the model isn't loaded yet or data is insufficient.
+  /// Pass [summaries] (daily summaries from the server) to avoid needing the
+  /// full reading history; otherwise they are built from [historicalData].
   static Future<MLClassificationResult?> classify(
     CollarData reading,
     Pet pet,
-    List<CollarData> historicalData,
-  ) async {
+    List<CollarData> historicalData, {
+    List<DailySummary>? summaries,
+  }) async {
     await ensureLoaded();
     if (_interpreter == null || _metadata == null) return null;
 
-    final features = buildFeatureVector(reading, pet, historicalData);
+    final features = buildFeatureVector(reading, pet, historicalData, summaries: summaries);
     if (features == null) return null;
 
     final mean = (_metadata!['normalization_mean'] as List).cast<num>();
@@ -116,8 +120,10 @@ class MLHealthClassifierService {
   static List<double>? buildFeatureVector(
     CollarData reading,
     Pet pet,
-    List<CollarData> historicalData,
-  ) {
+    List<CollarData> historicalData, {
+    List<DailySummary>? summaries,
+  }) {
+    final days = summaries ?? DailySummary.fromReadings([...historicalData, reading]);
     final heartRate = reading.heartRate?.toDouble();
     final temperature = reading.temperature;
     final steps = reading.steps ?? 0;
@@ -133,8 +139,7 @@ class MLHealthClassifierService {
     // data is missing, matching the training distribution's resting baseline.
     final safeActivityIndex = activityIndex > 0 ? activityIndex : 1.0;
 
-    final activityRatio =
-        HealthIntelligenceService.calculateActivityRatio(reading, historicalData) ?? 1.0;
+    final activityRatio = HealthIntelligenceService.activityRatioFromSummaries(days) ?? 1.0;
 
     // Calibrated resting HR baseline (population prior blended with the
     // pet's own history over the proposal's 30-day window -- see
@@ -142,7 +147,7 @@ class MLHealthClassifierService {
     // the RESTING baseline, not the alert ceiling, so this must match
     // resting_hr_baseline() in havapaw_ml/data/generate_dataset.py, not
     // getIndividualizedHeartRateThreshold (which is the alert ceiling).
-    final calibrated = BaselineCalibrationService.calibrate(pet, historicalData);
+    final calibrated = BaselineCalibrationService.calibrateFromSummaries(pet, days);
     final tempThreshold = HealthIntelligenceService.getIndividualizedTemperatureThreshold(pet);
     final hrDeviationPct = ((heartRate - calibrated.hrBaseline) / calibrated.hrBaseline) * 100;
     final tempDeviation = temperature - tempThreshold;

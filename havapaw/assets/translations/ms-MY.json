@@ -326,5 +326,18 @@
   "gatt_service_missing": "Peranti ini tidak menjalankan firmware kolar HavaPaw (perkhidmatan BLE tiada).",
   "wifi_connect_failed": "Kolar tidak dapat menyertai WiFi itu. Semak kata laluan dan gunakan WiFi 2.4 GHz.",
   "firebase_sync_failed": "Kolar menyertai WiFi tetapi gagal segerak ke Firebase. Semak peraturan Firestore.",
-  "continue": "Teruskan"
+  "continue": "Teruskan",
+  "vet_disclaimer": "Ini hanya panduan, bukan diagnosis. Hubungi doktor haiwan jika anda risau tentang haiwan anda.",
+  "collar_updated_ago": "Dikemas kini {}",
+  "minutes_ago": "{} minit lalu",
+  "hours_ago": "{} jam lalu",
+  "days_ago": "{} hari lalu",
+  "collar_live": "Aktif",
+  "collar_no_recent_data": "Tiada data terkini",
+  "collar_battery_pct": "Bateri {}%",
+  "alert_history": "Sejarah amaran",
+  "no_alerts_yet": "Tiada amaran lagi. Amaran yang dihantar ke telefon anda akan dipaparkan di sini.",
+  "was_alert_useful": "Adakah amaran ini berguna?",
+  "useful": "Berguna",
+  "not_useful": "Tidak berguna"
 }

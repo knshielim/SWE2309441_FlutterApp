@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import '../models/collar_data.dart';
+import '../models/daily_summary.dart';
 import '../models/pet.dart';
 import 'health_intelligence_service.dart';
 import 'ml_health_classifier_service.dart';
@@ -29,15 +30,18 @@ class VirtualVetService {
     required Pet pet,
     required CollarData reading,
     required List<CollarData> historicalData,
+    List<DailySummary>? summaries,
     String? question,
   }) async {
     final classification = await MLHealthClassifierService.classify(
       reading,
       pet,
       historicalData,
+      summaries: summaries,
     );
 
-    final activityRatio = HealthIntelligenceService.calculateActivityRatio(reading, historicalData);
+    final activityRatio = HealthIntelligenceService.activityRatioFromSummaries(
+        summaries ?? DailySummary.fromReadings([...historicalData, reading]));
 
     final callable = _functions.httpsCallable(
       'generateVirtualVetAdvice',

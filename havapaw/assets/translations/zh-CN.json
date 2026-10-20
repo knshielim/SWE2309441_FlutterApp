@@ -326,5 +326,18 @@
   "gatt_service_missing": "该设备未运行 HavaPaw 项圈固件（缺少 BLE 服务）。",
   "wifi_connect_failed": "项圈无法加入该 WiFi。请检查密码并使用 2.4 GHz 网络。",
   "firebase_sync_failed": "项圈已连上 WiFi，但无法同步到 Firebase。请检查 Firestore 规则。",
-  "continue": "继续"
+  "continue": "继续",
+  "vet_disclaimer": "这仅供参考，并非诊断。如果您担心宠物的健康，请联系兽医。",
+  "collar_updated_ago": "更新于{}",
+  "minutes_ago": "{}分钟前",
+  "hours_ago": "{}小时前",
+  "days_ago": "{}天前",
+  "collar_live": "在线",
+  "collar_no_recent_data": "暂无最新数据",
+  "collar_battery_pct": "电量 {}%",
+  "alert_history": "提醒记录",
+  "no_alerts_yet": "暂无提醒。发送到您手机的提醒会显示在这里。",
+  "was_alert_useful": "这条提醒有用吗？",
+  "useful": "有用",
+  "not_useful": "没用"
 }

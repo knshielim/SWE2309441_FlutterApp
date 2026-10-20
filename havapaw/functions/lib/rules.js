@@ -181,6 +181,37 @@ function deviationCheck(reading, daily, today) {
   return { state, baselineHr: base.mean, deviation, baselineDays: base.days };
 }
 
+/* ---------------------------------------------------------------------------
+ * Per-day summary the app reads instead of downloading every reading.
+ * Stored at users/{uid}/pets/{petId}/dailyStats/{YYYY-MM-DD} (local day).
+ * Matches the app's maths (HealthIntelligenceService / BaselineCalibrationService):
+ *  - steps: every reading that has steps (average steps per reading per day)
+ *  - resting heart rate: readings with a heart rate and at most
+ *    APP_RESTING_STEPS_CUTOFF steps (missing steps count as 0)
+ * ------------------------------------------------------------------------- */
+const APP_TIME_ZONE = "Asia/Kuala_Lumpur";
+const APP_RESTING_STEPS_CUTOFF = 150;
+
+function localDayKey(ms, timeZone = APP_TIME_ZONE) {
+  // en-CA formats as YYYY-MM-DD
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date(ms));
+}
+
+/** Field increments for this reading's daily summary, or null if it adds nothing. */
+function dailySummaryIncrements(reading) {
+  const inc = {};
+  if (isNum(reading.steps)) {
+    inc.stepsSum = reading.steps;
+    inc.stepsN = 1;
+  }
+  if (isNum(reading.heartRate) && (isNum(reading.steps) ? reading.steps : 0) <= APP_RESTING_STEPS_CUTOFF) {
+    inc.restHrSum = reading.heartRate;
+    inc.restHrN = 1;
+  }
+  return Object.keys(inc).length ? inc : null;
+}
+
 /**
  * Validates and cleans a reading sent by the collar. Unknown fields are dropped.
  * Returns { ok: true, value } or { ok: false, error }.
@@ -230,4 +261,6 @@ module.exports = {
   addToDailyStats,
   baselineHeartRate,
   deviationCheck,
+  localDayKey,
+  dailySummaryIncrements,
 };

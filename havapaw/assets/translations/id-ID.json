@@ -326,5 +326,18 @@
   "gatt_service_missing": "Perangkat ini tidak menjalankan firmware collar HavaPaw (layanan BLE tidak ada).",
   "wifi_connect_failed": "Collar tidak dapat bergabung ke WiFi itu. Periksa kata sandi dan gunakan WiFi 2.4 GHz.",
   "firebase_sync_failed": "Collar terhubung WiFi tetapi gagal sinkron ke Firebase. Periksa aturan Firestore.",
-  "continue": "Lanjut"
+  "continue": "Lanjut",
+  "vet_disclaimer": "Ini hanya panduan, bukan diagnosis. Hubungi dokter hewan jika Anda khawatir tentang hewan Anda.",
+  "collar_updated_ago": "Diperbarui {}",
+  "minutes_ago": "{} menit lalu",
+  "hours_ago": "{} jam lalu",
+  "days_ago": "{} hari lalu",
+  "collar_live": "Aktif",
+  "collar_no_recent_data": "Tidak ada data terbaru",
+  "collar_battery_pct": "Baterai {}%",
+  "alert_history": "Riwayat peringatan",
+  "no_alerts_yet": "Belum ada peringatan. Peringatan yang dikirim ke ponsel Anda akan muncul di sini.",
+  "was_alert_useful": "Apakah peringatan ini berguna?",
+  "useful": "Berguna",
+  "not_useful": "Tidak berguna"
 }

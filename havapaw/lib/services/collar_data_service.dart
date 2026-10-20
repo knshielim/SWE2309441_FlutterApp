@@ -19,7 +19,7 @@ class CollarDataService {
         .collection('collarData')
         .where('petId', isEqualTo: petId)
         .orderBy('timestamp', descending: true)
-        .limit(50)
+        .limit(10)
         .snapshots(includeMetadataChanges: true)
         .map((snapshot) {
       if (snapshot.docs.isEmpty) return null;
@@ -67,8 +67,10 @@ class CollarDataService {
     await _db.collection('users').doc(uid).collection('collarData').add(dataToSave);
   }
 
-  // Returns collar data for a specific pet from actual device only
-  static Stream<List<CollarData>> getCollarDataForPet(String petId) {
+  // Returns the most recent [limit] collar readings for a pet (newest first),
+  // from the actual device only. The collar uploads every 30 s, so always pass
+  // a limit; use DailySummaryService for anything that needs days of history.
+  static Stream<List<CollarData>> getCollarDataForPet(String petId, {int limit = 50}) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value([]);
 
@@ -78,6 +80,7 @@ class CollarDataService {
         .collection('collarData')
         .where('petId', isEqualTo: petId)
         .orderBy('timestamp', descending: true)
+        .limit(limit)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs

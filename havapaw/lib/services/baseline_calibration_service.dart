@@ -1,4 +1,5 @@
 import '../models/collar_data.dart';
+import '../models/daily_summary.dart';
 import '../models/pet.dart';
 import 'health_intelligence_service.dart';
 
@@ -68,26 +69,22 @@ class BaselineCalibrationService {
   /// well past day 30, the pet's own data dominates.
   static const double _priorPseudoDays = 30.0;
 
-  /// Readings with more steps than this are treated as active, not resting,
-  /// and excluded from the resting-baseline calculation so a busy day
-  /// doesn't drag the baseline upward.
-  static const int _restingStepsCutoff = 150;
+  /// Readings with more steps than DailySummary.restingStepsCutoff count as
+  /// active and are left out of the resting baseline, so a busy day doesn't
+  /// drag it upward.
+  static CalibratedBaseline calibrate(Pet pet, List<CollarData> historicalData) =>
+      calibrateFromSummaries(pet, DailySummary.fromReadings(historicalData));
 
-  static CalibratedBaseline calibrate(Pet pet, List<CollarData> historicalData) {
+  static CalibratedBaseline calibrateFromSummaries(Pet pet, List<DailySummary> summaries) {
     final populationBaseline = HealthIntelligenceService.getPopulationRestingHeartRateBaseline(pet);
     final populationThreshold = HealthIntelligenceService.getIndividualizedHeartRateThreshold(pet);
 
-    final Map<String, List<double>> dailyRestingReadings = {};
-    for (final d in historicalData) {
-      final hr = d.heartRate?.toDouble();
-      if (hr == null) continue;
-      final steps = d.steps ?? 0;
-      if (steps > _restingStepsCutoff) continue;
-      final key = '${d.timestamp.year}-${d.timestamp.month}-${d.timestamp.day}';
-      dailyRestingReadings.putIfAbsent(key, () => []).add(hr);
-    }
+    final dailyMeans = [
+      for (final s in summaries)
+        if (s.restingHeartRate != null) s.restingHeartRate!,
+    ];
 
-    if (dailyRestingReadings.isEmpty) {
+    if (dailyMeans.isEmpty) {
       return CalibratedBaseline(
         hrBaseline: populationBaseline,
         hrThreshold: populationThreshold,
@@ -97,9 +94,6 @@ class BaselineCalibrationService {
       );
     }
 
-    final dailyMeans = dailyRestingReadings.values
-        .map((readings) => readings.reduce((a, b) => a + b) / readings.length)
-        .toList();
     final individualMean = dailyMeans.reduce((a, b) => a + b) / dailyMeans.length;
     final daysOfData = dailyMeans.length;
 

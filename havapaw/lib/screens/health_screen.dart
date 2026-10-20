@@ -9,11 +9,15 @@ import '../services/medication_service.dart';
 import '../services/selected_pet_service.dart';
 import '../services/health_intelligence_service.dart';
 import '../services/emergency_mode_service.dart';
+import '../services/daily_summary_service.dart';
 import '../models/collar_data.dart';
+import '../models/daily_summary.dart';
 import '../models/pet.dart';
 import '../models/medication.dart';
 import 'settings_screen.dart';
 import 'health_trends_screen.dart';
+import 'alert_history_screen.dart';
+import '../widgets/collar_status_bar.dart';
 import 'ai_insights_screen.dart';
 import 'collar_connection_screen.dart';
 
@@ -245,35 +249,50 @@ class _HealthContent extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Collar freshness and battery
+            CollarStatusBar(reading: collarData),
+            const SizedBox(height: 12),
+
             // Overall health card with status
             _OverallHealthCard(collarData: collarData, healthStatus: healthStatus),
             const SizedBox(height: 16),
 
-            // Health alerts section
-            if (collarData != null)
-              StreamBuilder<List<CollarData>>(
-                stream: petId.isNotEmpty ? CollarDataService.getCollarDataForPet(petId) : Stream.value([]),
-                builder: (context, historicalSnapshot) {
-                  final historicalData = historicalSnapshot.data ?? [];
-                  final alerts = HealthIntelligenceService.generateHealthAlerts(
-                    collarData,
-                    pet,
-                    historicalData,
-                  );
+            // Health alerts section (history comes from the server's daily summaries)
+            StreamBuilder<List<DailySummary>>(
+              stream: DailySummaryService.streamForPet(petId, days: 7),
+              builder: (context, summarySnapshot) {
+                final alerts = HealthIntelligenceService.generateHealthAlerts(
+                  collarData,
+                  pet,
+                  const [],
+                  summaries: summarySnapshot.data ?? const [],
+                );
 
-                  if (alerts.isEmpty) return const SizedBox.shrink();
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Health Alerts', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.slateDark)),
-                      const SizedBox(height: 10),
-                      ...alerts.map((alert) => _HealthAlertCard(alert: alert)),
-                      const SizedBox(height: 16),
-                    ],
-                  );
-                },
-              ),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('Health Alerts', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.slateDark)),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const AlertHistoryScreen()),
+                          ),
+                          icon: const Icon(Icons.history_rounded, size: 18, color: AppColors.primaryTeal),
+                          label: Text('alert_history'.tr(), style: const TextStyle(color: AppColors.primaryTeal)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ...alerts.map((alert) => _HealthAlertCard(alert: alert)),
+                    const SizedBox(height: 16),
+                  ],
+                );
+              },
+            ),
 
             // Vital signs
             Text('vital_signs'.tr(), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.slateDark)),

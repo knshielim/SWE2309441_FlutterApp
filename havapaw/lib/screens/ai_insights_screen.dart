@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../theme/app_theme.dart';
 import '../services/collar_data_service.dart';
+import '../services/daily_summary_service.dart';
+import '../models/daily_summary.dart';
 import '../services/ai_health_insights_service.dart';
 import '../services/pet_service.dart';
 import '../services/ml_health_classifier_service.dart';
@@ -27,6 +29,7 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
   String _healthSummary = '';
   CollarData? _latestReading;
   List<CollarData> _historicalData = [];
+  List<DailySummary> _summaries = [];
   MLClassificationResult? _mlResult;
   CalibratedBaseline? _calibration;
 
@@ -44,12 +47,11 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
       final pet = await PetService.getPetById(widget.petId);
       setState(() => _pet = pet);
 
-      // Load collar data
-      final collarDataStream = CollarDataService.getCollarDataForPet(widget.petId);
-      final dataList = await collarDataStream.first;
-      
-      final recentData = dataList.take(50).toList();
-      final historicalData = dataList.toList();
+      // Latest readings plus the server's daily summaries (instead of
+      // downloading the whole history; see DailySummaryService).
+      final recentData = await CollarDataService.getCollarDataForPet(widget.petId, limit: 50).first;
+      final summaries = await DailySummaryService.streamForPet(widget.petId).first;
+      final historicalData = recentData;
 
       if (pet != null && recentData.isNotEmpty) {
         // Generate AI insights
@@ -57,6 +59,7 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
           pet,
           recentData,
           historicalData,
+          summaries: summaries,
         );
 
         // Generate health summary
@@ -68,16 +71,18 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
           recentData.first,
           pet,
           historicalData,
+          summaries: summaries,
         );
 
         // 30-day baseline personalization status (proposal Phase 4)
-        final calibration = BaselineCalibrationService.calibrate(pet, historicalData);
+        final calibration = BaselineCalibrationService.calibrateFromSummaries(pet, summaries);
 
         setState(() {
           _insights = insights;
           _healthSummary = summary;
           _latestReading = recentData.first;
           _historicalData = historicalData;
+          _summaries = summaries;
           _mlResult = mlResult;
           _calibration = calibration;
           _hasData = true;
@@ -340,6 +345,7 @@ class _AIInsightsScreenState extends State<AIInsightsScreen> {
                     insights: _insights,
                     latestReading: _latestReading,
                     historicalData: _historicalData,
+                    summaries: _summaries,
                   ),
                 ],
               ),
@@ -694,12 +700,14 @@ class _AIQueryCard extends StatefulWidget {
   final List<HealthInsight> insights;
   final CollarData? latestReading;
   final List<CollarData> historicalData;
+  final List<DailySummary> summaries;
 
   const _AIQueryCard({
     required this.pet,
     required this.insights,
     required this.latestReading,
     required this.historicalData,
+    required this.summaries,
   });
 
   @override
@@ -731,6 +739,7 @@ class _AIQueryCardState extends State<_AIQueryCard> {
         pet: pet,
         reading: reading,
         historicalData: widget.historicalData,
+        summaries: widget.summaries,
         question: query,
       );
       setState(() {
@@ -863,9 +872,28 @@ class _AIQueryCardState extends State<_AIQueryCard> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      _response,
-                      style: const TextStyle(fontSize: 14, color: AppColors.slateDark, height: 1.5),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _response,
+                          style: const TextStyle(fontSize: 14, color: AppColors.slateDark, height: 1.5),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.textGrey),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'vet_disclaimer'.tr(),
+                                style: const TextStyle(fontSize: 11, color: AppColors.textGrey, height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ],

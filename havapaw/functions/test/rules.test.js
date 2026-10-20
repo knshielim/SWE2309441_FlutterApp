@@ -99,3 +99,15 @@ test("deviation: needs a baseline from earlier days, compares like with like, 35
   const old = { "2026-09-30": day(200, 200, 1000), ...daily };
   assert.strictEqual(r.deviationCheck({ heartRate: 100, steps: 10 }, old, today), null);
 });
+
+test("daily summary: local day in Malaysia time, steps and resting heart rate", () => {
+  // 2026-10-20 17:30 UTC is 01:30 on 21 Oct in Kuala Lumpur
+  assert.strictEqual(r.localDayKey(Date.parse("2026-10-20T17:30:00Z")), "2026-10-21");
+  assert.strictEqual(r.localDayKey(Date.parse("2026-10-20T15:59:00Z")), "2026-10-20");
+  assert.deepStrictEqual(r.dailySummaryIncrements({ heartRate: 80, steps: 20 }),
+    { stepsSum: 20, stepsN: 1, restHrSum: 80, restHrN: 1 });
+  assert.deepStrictEqual(r.dailySummaryIncrements({ heartRate: 120, steps: 400 }), { stepsSum: 400, stepsN: 1 });
+  // missing steps count as resting for the heart-rate baseline (same as the app)
+  assert.deepStrictEqual(r.dailySummaryIncrements({ heartRate: 75 }), { restHrSum: 75, restHrN: 1 });
+  assert.strictEqual(r.dailySummaryIncrements({ temperature: 38.5 }), null);
+});

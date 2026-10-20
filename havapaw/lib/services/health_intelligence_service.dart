@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import '../models/collar_data.dart';
+import '../models/daily_summary.dart';
 import '../models/pet.dart';
 
 // Health status classification based on research proposal
@@ -256,74 +257,61 @@ class HealthIntelligenceService {
   // far against the 3 most recent days before today. A ratio of 1.0 means a
   // normal day, which is how activity_ratio_3day is defined in the training data.
 
-  static String _dayKey(DateTime t) {
-    final d = t.toLocal();
-    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  }
-
   // Average steps per reading over the 3 most recent days before today
   // (each day weighted equally). 0.0 when there is no earlier day yet.
-  static double calculateThreeDayAverage(List<CollarData> recentData, {DateTime? now}) {
-    final today = _dayKey(now ?? DateTime.now());
-    final Map<String, List<int>> stepsByDay = {};
-    for (final data in recentData) {
-      final steps = data.steps;
-      if (steps == null) continue;
-      final key = _dayKey(data.timestamp);
-      if (key.compareTo(today) >= 0) continue;
-      stepsByDay.putIfAbsent(key, () => []).add(steps);
-    }
-    if (stepsByDay.isEmpty) return 0.0;
-
-    final days = stepsByDay.keys.toList()..sort();
-    final recentDays = days.sublist(max(0, days.length - learningPeriodDays));
-    final dailyMeans = recentDays.map((day) {
-      final values = stepsByDay[day]!;
-      return values.reduce((a, b) => a + b) / values.length;
-    }).toList();
-    return dailyMeans.reduce((a, b) => a + b) / dailyMeans.length;
+  static double threeDayAverageFromSummaries(List<DailySummary> summaries, {DateTime? now}) {
+    final today = DailySummary.dayKey(now ?? DateTime.now());
+    final earlier = summaries
+        .where((s) => s.date.compareTo(today) < 0 && s.avgStepsPerReading != null)
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final recentDays = earlier.sublist(max(0, earlier.length - learningPeriodDays));
+    if (recentDays.isEmpty) return 0.0;
+    return recentDays.map((s) => s.avgStepsPerReading!).reduce((a, b) => a + b) / recentDays.length;
   }
 
-  // Today's readings with steps, including [current] if it is not already in [historicalData].
-  static List<int> _todaySteps(CollarData current, List<CollarData> historicalData, DateTime now) {
-    final today = _dayKey(now);
-    final todays = historicalData.where((d) => d.steps != null && _dayKey(d.timestamp) == today).toList();
-    if (current.steps != null &&
-        _dayKey(current.timestamp) == today &&
-        !todays.any((d) => d.id != null && d.id == current.id)) {
-      todays.add(current);
+  static double calculateThreeDayAverage(List<CollarData> recentData, {DateTime? now}) =>
+      threeDayAverageFromSummaries(DailySummary.fromReadings(recentData), now: now);
+
+  static DailySummary? _todaySummary(List<DailySummary> summaries, DateTime now) {
+    final today = DailySummary.dayKey(now);
+    for (final s in summaries) {
+      if (s.date == today) return s;
     }
-    return todays.map((d) => d.steps!).toList();
+    return null;
   }
 
   // Today's average steps per reading divided by the 3-day average.
-  // null when there is no earlier day to compare with.
+  // null when there is no earlier day, or no reading today, to compare.
+  static double? activityRatioFromSummaries(List<DailySummary> summaries, {DateTime? now}) {
+    final at = now ?? DateTime.now();
+    final threeDayAverage = threeDayAverageFromSummaries(summaries, now: at);
+    if (threeDayAverage <= 0) return null;
+    final todayAverage = _todaySummary(summaries, at)?.avgStepsPerReading;
+    if (todayAverage == null) return null;
+    return todayAverage / threeDayAverage;
+  }
+
   static double? calculateActivityRatio(
     CollarData current,
     List<CollarData> historicalData, {
     DateTime? now,
-  }) {
-    final at = now ?? DateTime.now();
-    final threeDayAverage = calculateThreeDayAverage(historicalData, now: at);
-    if (threeDayAverage <= 0) return null;
-    final today = _todaySteps(current, historicalData, at);
-    if (today.isEmpty) return null;
-    final todayAverage = today.reduce((a, b) => a + b) / today.length;
-    return todayAverage / threeDayAverage;
-  }
+  }) =>
+      activityRatioFromSummaries(DailySummary.fromReadings([...historicalData, current]), now: now);
 
-  // Low Activity Warning: today's activity more than 35% below the 3-day average
+  // Low Activity Warning: today's activity more than 35% below the 3-day average.
+  // Uses [summaries] (from the server) when given, otherwise builds them from the readings.
   static HealthAlert? detectLowActivity(
     CollarData currentData,
     List<CollarData> historicalData, {
     DateTime? now,
+    List<DailySummary>? summaries,
   }) {
     final at = now ?? DateTime.now();
+    final days = summaries ?? DailySummary.fromReadings([...historicalData, currentData]);
     // Wait for enough of today's readings so an early-morning nap is not a "low day".
-    if (_todaySteps(currentData, historicalData, at).length < minTodayReadingsForActivity) {
-      return null;
-    }
-    final ratio = calculateActivityRatio(currentData, historicalData, now: at);
+    if ((_todaySummary(days, at)?.stepsN ?? 0) < minTodayReadingsForActivity) return null;
+    final ratio = activityRatioFromSummaries(days, now: at);
     if (ratio != null && ratio < lowActivityThreshold) {
       final percentage = (ratio * 100).toStringAsFixed(0);
       return HealthAlert(
@@ -342,8 +330,9 @@ class HealthIntelligenceService {
   static List<HealthAlert> generateHealthAlerts(
     CollarData currentData,
     Pet pet,
-    List<CollarData> historicalData,
-  ) {
+    List<CollarData> historicalData, {
+    List<DailySummary>? summaries,
+  }) {
     final alerts = <HealthAlert>[];
 
     // Context-aware alerts
@@ -357,7 +346,7 @@ class HealthIntelligenceService {
     if (highTempAlert != null) alerts.add(highTempAlert);
 
     // Behavior pattern learning alert
-    final lowActivityAlert = detectLowActivity(currentData, historicalData);
+    final lowActivityAlert = detectLowActivity(currentData, historicalData, summaries: summaries);
     if (lowActivityAlert != null) alerts.add(lowActivityAlert);
 
     return alerts;

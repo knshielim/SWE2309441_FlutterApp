@@ -320,6 +320,20 @@ exports.onCollarReading = onDocumentCreated(
     ]);
     if (!petDoc.exists) return;
 
+    // Daily summary for the app (written whatever the alert settings are).
+    const inc = rules.dailySummaryIncrements(reading);
+    if (inc) {
+      const tsMs = Date.parse(reading.timestamp);
+      const day = rules.localDayKey(Number.isNaN(tsMs) ? Date.now() : tsMs);
+      const fields = { date: day, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+      for (const [k, v] of Object.entries(inc)) fields[k] = admin.firestore.FieldValue.increment(v);
+      try {
+        await userRef.collection("pets").doc(petId).collection("dailyStats").doc(day).set(fields, { merge: true });
+      } catch (e) {
+        logger.error("dailyStats update failed", e);
+      }
+    }
+
     const pet = petDoc.data();
     const prefs = (userDoc.exists && userDoc.get("alertPrefs")) || {};
     if (prefs.push === false) return;

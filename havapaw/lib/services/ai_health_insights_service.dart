@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/collar_data.dart';
+import '../models/daily_summary.dart';
 import '../models/pet.dart';
 import 'health_intelligence_service.dart';
 
@@ -36,8 +37,9 @@ class AIHealthInsightsService {
   static Future<List<HealthInsight>> generateHealthInsights(
     Pet pet,
     List<CollarData> recentData,
-    List<CollarData> historicalData,
-  ) async {
+    List<CollarData> historicalData, {
+    List<DailySummary>? summaries,
+  }) async {
     final insights = <HealthInsight>[];
 
     if (recentData.isEmpty) return insights;
@@ -46,7 +48,7 @@ class AIHealthInsightsService {
     insights.addAll(_analyzeHeartRatePatterns(pet, recentData));
 
     // Analyze activity patterns
-    insights.addAll(_analyzeActivityPatterns(pet, recentData, historicalData));
+    insights.addAll(_analyzeActivityPatterns(pet, recentData, historicalData, summaries));
 
     // Analyze temperature patterns
     insights.addAll(_analyzeTemperaturePatterns(pet, recentData));
@@ -137,19 +139,27 @@ class AIHealthInsightsService {
     Pet pet,
     List<CollarData> recentData,
     List<CollarData> historicalData,
+    List<DailySummary>? summaries,
   ) {
     final insights = <HealthInsight>[];
 
     if (recentData.isEmpty) return insights;
 
+    // Historical average steps per reading, from the daily summaries when given.
+    double? avgHistoricalSteps;
+    if (summaries != null) {
+      final n = summaries.fold<int>(0, (a, s) => a + s.stepsN);
+      if (n > 0) avgHistoricalSteps = summaries.fold<int>(0, (a, s) => a + s.stepsSum) / n;
+    } else if (historicalData.isNotEmpty) {
+      final historicalSteps = historicalData.map((d) => d.steps ?? 0).toList();
+      avgHistoricalSteps = historicalSteps.reduce((a, b) => a + b) / historicalSteps.length;
+    }
+
     final recentSteps = recentData.map((d) => d.steps ?? 0).toList();
     final avgRecentSteps = recentSteps.reduce((a, b) => a + b) / recentSteps.length;
 
     // Compare with historical data
-    if (historicalData.isNotEmpty) {
-      final historicalSteps = historicalData.map((d) => d.steps ?? 0).toList();
-      final avgHistoricalSteps = historicalSteps.reduce((a, b) => a + b) / historicalSteps.length;
-
+    if (avgHistoricalSteps != null && avgHistoricalSteps > 0) {
       final changePercentage = ((avgRecentSteps - avgHistoricalSteps) / avgHistoricalSteps) * 100;
 
       if (changePercentage < -30) {

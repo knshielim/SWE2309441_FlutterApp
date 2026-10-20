@@ -43,6 +43,8 @@ Firestore may ask for composite indexes the first time the geofence query runs
 | Walk mode | Same, Walk mode ON | no push |
 | Health alert | Lower a pet's weight/age in the profile or temporarily lower the limit in `rules.js`, or post a test reading | push after 2 abnormal readings, then at most one per 15 min |
 | Baseline deviation | Needs at least one earlier day of readings (60+ in the same resting/active state). Then send two resting readings 35%+ above that baseline, or edit `daily` in `alertState/<petId>` to fake a baseline | push written by GPT-4, e.g. "heart rate is 40% higher than usual"; `alerts` doc has `generatedBy` |
+| Alert history | Health screen -> Alert history; tap 👍 or 👎 on an alert | alert listed; its `users/<uid>/alerts` doc gets `feedback: useful / not_useful` |
+| Daily summary | After a few uploads, open `users/<uid>/pets/<petId>/dailyStats/<today>` | `stepsSum`, `stepsN`, `restHrSum`, `restHrN` increase with each reading |
 | Low battery | Battery under 15 % | one push, re-arms after 25 % |
 | Settings | Turn "Health alerts" off | no health push |
 | Consent | New account | consent screen before Home |
@@ -60,3 +62,14 @@ curl -X POST "$INGEST_URL" -H "Content-Type: application/json" \
 The collar checks the server certificate against Google's root CAs (GTS Root R1 and R4,
 valid until 2036) instead of accepting any certificate. It needs the time from NTP first;
 until the clock is set it reports `TIME_WAIT` and skips that upload.
+
+## 5. Daily summaries and alert feedback
+
+`onCollarReading` also keeps one small document per pet per day
+(`users/<uid>/pets/<petId>/dailyStats/<YYYY-MM-DD>`, Malaysia time). The app reads these for the
+3-day activity average, the low-activity alert, the 30-day heart-rate baseline and the ML features,
+instead of downloading every reading (about 2,900 a day). Days before the new functions were deployed
+have no summary, so the baselines start from the deploy date.
+
+The Alert history screen lists `users/<uid>/alerts` and lets owners rate each alert useful or not
+useful. Export these (`feedback` field) to report alert relevance in the evaluation.

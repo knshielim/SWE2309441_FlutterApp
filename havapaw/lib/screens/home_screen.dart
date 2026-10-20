@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
 import '../widgets/bottom_nav.dart';
+import '../widgets/collar_status_bar.dart';
 import '../theme/app_theme.dart';
 import '../services/pet_service.dart';
 import '../services/selected_pet_service.dart';
@@ -516,6 +517,11 @@ class _HomeTabState extends State<_HomeTab> {
                         
                         return Column(
                           children: [
+                            // Collar freshness and battery
+                            if (collarData != null) ...[
+                              _SectionCard(child: CollarStatusBar(reading: collarData)),
+                              const SizedBox(height: 16),
+                            ],
                             // Health score
                             _SectionCard(
                               child: Column(
