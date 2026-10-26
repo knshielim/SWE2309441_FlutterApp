@@ -51,7 +51,7 @@ def population_resting_hr(pet, at):
     if str(pet.get("type", "dog")).lower() == "cat":
         base = 170.0
     else:
-        base = {"toy": 135.0, "small": 110.0, "medium": 90.0, "large": 75.0, "giant": 65.0}[
+        base = {"toy": 59.7, "small": 59.7, "medium": 59.7, "large": 52.4, "giant": 52.4}[
             dog_size_class(float(pet.get("weight") or 0))]
     if age < 1:
         base += 15

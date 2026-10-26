@@ -296,4 +296,24 @@ void main() {
           isNull);
     });
   });
+
+  group('calculateHealthScore', () {
+    test('a healthy resting dog scores 100 (real resting HR is about 60 bpm)', () {
+      final score = HealthIntelligenceService.calculateHealthScore(
+          _reading(heartRate: 62, temperature: 38.6, spo2: 97), _pet());
+      expect(score, 100);
+    });
+
+    test('a healthy cat at 170 bpm is not penalised', () {
+      final score = HealthIntelligenceService.calculateHealthScore(
+          _reading(heartRate: 170, temperature: 38.9, spo2: 97), _pet(type: 'cat', weight: 4.5));
+      expect(score, 100);
+    });
+
+    test('high heart rate, fever and low SpO2 lower the score', () {
+      final score = HealthIntelligenceService.calculateHealthScore(
+          _reading(heartRate: 175, temperature: 40.8, spo2: 88), _pet());
+      expect(score, 40);
+    });
+  });
 }

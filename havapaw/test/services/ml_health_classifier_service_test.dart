@@ -105,7 +105,7 @@ void main() {
 
     test('a heart rate exactly at the calibrated baseline gives ~0% deviation', () {
       final pet = _pet(type: 'dog', weight: 20.0, ageYears: 4);
-      final reading = _reading(heartRate: 90, temperature: 38.5);
+      final reading = _reading(heartRate: 60, temperature: 38.5);
       final features = MLHealthClassifierService.buildFeatureVector(reading, pet, []);
       // index 6 = hr_deviation_pct
       expect(features![6], closeTo(0.0, 1.0));
@@ -113,7 +113,7 @@ void main() {
 
     test('an elevated heart rate produces a clearly positive deviation', () {
       final pet = _pet(type: 'dog', weight: 20.0, ageYears: 4);
-      final reading = _reading(heartRate: 180, temperature: 38.5); // roughly double the ~90bpm baseline
+      final reading = _reading(heartRate: 180, temperature: 38.5); // about three times the ~60 bpm baseline
       final features = MLHealthClassifierService.buildFeatureVector(reading, pet, []);
       expect(features![6], greaterThan(50.0));
     });

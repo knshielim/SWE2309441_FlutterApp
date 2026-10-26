@@ -17,6 +17,7 @@ MODEL_PATH = ROOT / "models" / "random_forest_model.joblib"
 STATS_PATH = ROOT / "models" / "feature_stats.json"
 REPORT_PATH = ROOT / "reports" / "rf_evaluation_report.md"
 CALIBRATION_PATH = ROOT / "external" / "external_calibration.json"
+DATASET_INFO_PATH = ROOT / "data" / "dataset_info.json"
 
 FEATURE_COLUMNS = [
     "heart_rate", "temperature", "spo2", "activity_index", "steps",
@@ -51,17 +52,39 @@ def calibration_summary():
         s = block["summary"]
         parts.append(f"- activity_index ({species}) drawn from real accelerometer data: "
                      f"{s['resting']['n']:,} resting and {s['active']['n']:,} active samples")
-    if "invoxia" in cal:
+    info = json.loads(DATASET_INFO_PATH.read_text(encoding="utf-8")) if DATASET_INFO_PATH.exists() else {}
+    if info.get("dog_resting_hr_source") == "invoxia":
+        values = ", ".join(f"{k} {v}" for k, v in info["dog_resting_hr_by_size"].items())
+        parts.append(f"- dog resting heart-rate baselines from {cal['invoxia']['n_dogs']} real dogs (Invoxia): "
+                     f"{values} bpm; no toy or giant dogs in that data, so toy uses small and giant uses large")
+    elif "invoxia" in cal:
         parts.append(f"- dog resting heart rate compared with {cal['invoxia']['n_dogs']} real dogs "
                      "(Invoxia); see external/external_calibration_report.md")
     if "rri" in cal:
         parts.append(f"- heart-rate thresholds checked against ECG recordings of {cal['rri']['n_dogs']} dogs "
                      "(Zenodo 19383015); not used for training")
-    parts.append("- steps, SpO2, temperature and the stressed/anomaly classes remain synthetic")
+    parts.append("- cat heart rate, steps, SpO2, temperature and the stressed/anomaly classes remain synthetic")
     return "\n".join(parts) + "\n"
 
 
-def evaluate_real(clf, species_encoder, csv_path):
+def limitations(importance, has_real):
+    lines = [
+        "\n## Limitations\n",
+        f"- activity_index (the only real accelerometer feature) has an importance of only "
+        f"{importance['activity_index']:.2f}. The calibration found that a single accelerometer sample "
+        "separates resting from active poorly, so the model relies on steps and activity_ratio_3day, "
+        "which are synthetic. A windowed feature (e.g. the spread of activity_index over a few seconds), "
+        "computed both from the public data and in the firmware, would be needed to change this.",
+        "- stressed and anomaly can only be checked on simulated data: they cannot be ethically "
+        "provoked in real pets.",
+    ]
+    if not has_real:
+        lines.append("- No real-pet evaluation yet: run with --real-csv (and --mix-real) once labelled "
+                     "collar readings are available.")
+    return "\n".join(lines) + "\n"
+
+
+def load_real(csv_path, species_encoder):
     real = pd.read_csv(csv_path, keep_default_na=False)
     names = {n: i for i, n in enumerate(LABEL_NAMES)}
     real["label"] = real["label"].astype(str).str.strip().str.lower().map(
@@ -71,6 +94,23 @@ def evaluate_real(clf, species_encoder, csv_path):
         raise SystemExit(f"No labelled rows in {csv_path}: fill in the label column first.")
     real["label"] = real["label"].astype(int)
     real["species_encoded"] = species_encoder.transform(real["species"])
+    if "pet_id" not in real.columns or (real["pet_id"].astype(str) == "").any():
+        real["pet_id"] = real["pet_name"]
+    return real
+
+
+def new_model():
+    return RandomForestClassifier(
+        n_estimators=200,
+        max_depth=12,
+        min_samples_leaf=3,
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=-1,
+    )
+
+
+def evaluate_real(clf, real):
     X, y = real[FEATURE_COLUMNS], real["label"]
     preds = clf.predict(X)
     acc = accuracy_score(y, preds)
@@ -80,10 +120,42 @@ def evaluate_real(clf, species_encoder, csv_path):
     return len(real), acc, report, cm
 
 
+# Hybrid comparison: leave one real pet out at a time
+def compare_hybrid(clf_synthetic, X_syn, y_syn, real, real_weight):
+    pets = sorted(real["pet_id"].astype(str).unique())
+    if len(pets) < 2:
+        raise SystemExit("--mix-real needs labelled readings from at least 2 real pets.")
+    rows, all_y, syn_preds, hyb_preds = [], [], [], []
+    for pet in pets:
+        test = real[real["pet_id"].astype(str) == pet]
+        others = real[real["pet_id"].astype(str) != pet]
+        X_train = pd.concat([X_syn, others[FEATURE_COLUMNS]])
+        y_train = pd.concat([y_syn, others["label"]])
+        weights = np.concatenate([np.ones(len(X_syn)), np.full(len(others), real_weight)])
+        hybrid = new_model().fit(X_train, y_train, sample_weight=weights)
+
+        y_true = test["label"].to_numpy()
+        p_syn = clf_synthetic.predict(test[FEATURE_COLUMNS])
+        p_hyb = hybrid.predict(test[FEATURE_COLUMNS])
+        rows.append((pet, len(test), accuracy_score(y_true, p_syn), accuracy_score(y_true, p_hyb)))
+        all_y.extend(y_true)
+        syn_preds.extend(p_syn)
+        hyb_preds.extend(p_hyb)
+    return rows, accuracy_score(all_y, syn_preds), accuracy_score(all_y, hyb_preds), \
+        classification_report(all_y, hyb_preds, labels=LABEL_IDS, target_names=LABEL_NAMES,
+                              digits=4, zero_division=0)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--real-csv", help="real labelled readings for external validation")
+    parser.add_argument("--mix-real", action="store_true",
+                        help="also compare synthetic-only vs synthetic + real training (leave one pet out)")
+    parser.add_argument("--real-weight", type=float, default=10.0,
+                        help="sample weight of each real reading in hybrid training")
     args = parser.parse_args()
+    if args.mix_real and not args.real_csv:
+        parser.error("--mix-real needs --real-csv")
 
     df, species_encoder = load_data()
     X, y, groups = df[FEATURE_COLUMNS], df["label"], df["pet_id"]
@@ -97,14 +169,7 @@ def main():
     species_test = df["species"].iloc[test_idx]
     assert set(groups.iloc[train_idx]).isdisjoint(set(groups.iloc[test_idx])), "pet leaked across split"
 
-    clf = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=12,
-        min_samples_leaf=3,
-        class_weight="balanced",
-        random_state=42,
-        n_jobs=-1,
-    )
+    clf = new_model()
 
     # 5-fold cross-validation on the training pets, also grouped by pet
     cv = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
@@ -129,13 +194,28 @@ def main():
 
     real_section = ""
     if args.real_csv:
-        n_real, real_acc, real_report, real_cm = evaluate_real(clf, species_encoder, args.real_csv)
+        real = load_real(args.real_csv, species_encoder)
+        n_real, real_acc, real_report, real_cm = evaluate_real(clf, real)
         real_section = (
             f"\n## External validation on real readings (n={n_real}, never used for training)\n\n"
             f"**Accuracy: {real_acc*100:.2f}%**\n\n```\n{real_report}\n```\n\n"
             "Confusion matrix (rows=actual, cols=predicted)\n\n" + table(real_cm)
         )
         print(f"Real-data accuracy: {real_acc*100:.2f}% (n={n_real})")
+
+        if args.mix_real:
+            rows, syn_acc, hyb_acc, hyb_report = compare_hybrid(clf, X_train, y_train, real, args.real_weight)
+            real_section += (
+                "\n## Hybrid training comparison (leave one real pet out)\n\n"
+                "Each real pet is tested by a model trained on the synthetic data only, and by a model "
+                "trained on the synthetic data plus the other real pets "
+                f"(real readings weighted x{args.real_weight:g}).\n\n"
+                "| Real pet | readings | synthetic only | synthetic + real |\n|---|---|---|---|\n"
+                + "".join(f"| {pet} | {n} | {a*100:.2f}% | {b*100:.2f}% |\n" for pet, n, a, b in rows)
+                + f"| **all** | {sum(r[1] for r in rows)} | **{syn_acc*100:.2f}%** | **{hyb_acc*100:.2f}%** |\n\n"
+                "Synthetic + real, all pets:\n\n```\n" + hyb_report + "\n```\n"
+            )
+            print(f"Leave-one-pet-out: synthetic only {syn_acc*100:.2f}%, synthetic + real {hyb_acc*100:.2f}%")
 
     with open(REPORT_PATH, "w", encoding="utf-8") as f:
         f.write("# HavaPaw Random Forest Health Classifier - Evaluation Report\n\n")
@@ -158,6 +238,7 @@ def main():
         for feat, imp in importances:
             f.write(f"| {feat} | {imp:.4f} |\n")
         f.write(real_section)
+        f.write(limitations(dict(importances), bool(args.real_csv)))
 
     print(f"CV accuracy (grouped): {cv_accuracy*100:.2f}%")
     print(f"Test accuracy (unseen pets): {test_accuracy*100:.2f}%")

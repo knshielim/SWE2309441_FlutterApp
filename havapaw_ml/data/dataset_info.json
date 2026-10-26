@@ -1,0 +1,10 @@
+{
+  "dog_resting_hr_source": "invoxia",
+  "dog_resting_hr_by_size": {
+    "small": 59.7,
+    "medium": 59.7,
+    "large": 52.4,
+    "toy": 59.7,
+    "giant": 52.4
+  }
+}

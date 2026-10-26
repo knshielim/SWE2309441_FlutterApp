@@ -8,10 +8,11 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 ML_ROOT = HERE.parent
 OUTPUT_PATH = HERE / "pet_health_dataset.csv"
+INFO_PATH = HERE / "dataset_info.json"
 CALIBRATION_PATH = ML_ROOT / "external" / "external_calibration.json"
 
 USE_EXTERNAL_ACTIVITY = True
-USE_EXTERNAL_DOG_HR = False
+USE_EXTERNAL_DOG_HR = True
 
 RNG = np.random.default_rng(42)
 Q = np.linspace(0, 100, 101)
@@ -33,8 +34,19 @@ def load_calibration():
 
 CAL = load_calibration()
 ACTIVITY_CAL = (CAL or {}).get("activity_index", {}) if USE_EXTERNAL_ACTIVITY else {}
-HR_OVERRIDE = (CAL or {}).get("invoxia", {}).get("dog_resting_hr_override", {}) if USE_EXTERNAL_DOG_HR else {}
 HR_SD = (CAL or {}).get("invoxia", {}).get("between_dog_sd", 8.0)
+
+
+# Real dog resting heart rate (Invoxia) by size. Invoxia has no toy or giant
+# dogs, so toy uses the small value and giant the large value.
+def dog_hr_override():
+    measured = (CAL or {}).get("invoxia", {}).get("dog_resting_hr_override", {})
+    if not USE_EXTERNAL_DOG_HR or not {"small", "medium", "large"} <= measured.keys():
+        return {}
+    return {**measured, "toy": measured["small"], "giant": measured["large"]}
+
+
+HR_OVERRIDE = dog_hr_override()
 
 
 def individualized_hr_threshold(species, age, weight):
@@ -223,8 +235,12 @@ if __name__ == "__main__":
     else:
         print("activity_index: legacy hand-picked distributions (no external calibration loaded)")
     if HR_OVERRIDE:
-        print(f"dog resting HR: Invoxia override for {sorted(HR_OVERRIDE)} - update the Dart baselines to match!")
+        print(f"dog resting HR from Invoxia: {HR_OVERRIDE}")
     df = build_dataset()
     df.to_csv(OUTPUT_PATH, index=False)
+    # Records the heart-rate source so the training report can state it
+    with open(INFO_PATH, "w", encoding="utf-8") as f:
+        json.dump({"dog_resting_hr_source": "invoxia" if HR_OVERRIDE else "literature",
+                   "dog_resting_hr_by_size": HR_OVERRIDE}, f, indent=2)
     print(f"Generated {len(df)} rows across {df['pet_id'].nunique()} synthetic pet profiles")
     print(df["label_name"].value_counts())

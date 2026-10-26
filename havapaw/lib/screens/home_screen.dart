@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../services/pet_service.dart';
 import '../services/selected_pet_service.dart';
 import '../services/collar_data_service.dart';
+import '../services/health_intelligence_service.dart';
 import '../services/geofence_service.dart';
 import '../services/pet_location_service.dart';
 import '../services/sound_service.dart';
@@ -116,40 +117,6 @@ class _HomeTabState extends State<_HomeTab> {
     } catch (e) {
       // Silently fail for preview
     }
-  }
-
-  // Calculates a simple health score from collar data.
-  int _calculateHealthScore(CollarData data) {
-    int score = 100;
-    
-    // Deduct points based on heart rate
-    if (data.heartRate != null) {
-      if (data.heartRate! < 60 || data.heartRate! > 120) {
-        score -= 20;
-      } else if (data.heartRate! < 70 || data.heartRate! > 110) {
-        score -= 10;
-      }
-    }
-    
-    // Deduct points based on temperature
-    if (data.temperature != null) {
-      if (data.temperature! < 36.0 || data.temperature! > 40.0) {
-        score -= 20;
-      } else if (data.temperature! < 36.5 || data.temperature! > 39.0) {
-        score -= 10;
-      }
-    }
-    
-    // Deduct points based on activity (steps)
-    if (data.steps != null) {
-      if (data.steps! < 3000) {
-        score -= 15;
-      } else if (data.steps! < 5000) {
-        score -= 5;
-      }
-    }
-    
-    return score.clamp(0, 100);
   }
 
   @override
@@ -510,7 +477,7 @@ class _HomeTabState extends State<_HomeTab> {
                         // Calculate health score based on collar data
                         int healthScore = 100;
                         if (collarData != null) {
-                          healthScore = _calculateHealthScore(collarData);
+                          healthScore = HealthIntelligenceService.calculateHealthScore(collarData, pet);
                         }
                         
                         return Column(

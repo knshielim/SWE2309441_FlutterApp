@@ -70,13 +70,15 @@ class HealthIntelligenceService {
       base = 170.0;
     } else {
       final sizeClass = dogSizeClass(pet.weight);
+      // Real resting heart rate (Invoxia, 40 dogs); same values as generate_dataset.py.
+      // No toy or giant dogs in that data: toy uses small, giant uses large.
       base = switch (sizeClass) {
-        'toy' => 135.0,
-        'small' => 110.0,
-        'medium' => 90.0,
-        'large' => 75.0,
-        'giant' => 65.0,
-        _ => 90.0,
+        'toy' => 59.7,
+        'small' => 59.7,
+        'medium' => 59.7,
+        'large' => 52.4,
+        'giant' => 52.4,
+        _ => 59.7,
       };
     }
 
@@ -153,6 +155,43 @@ class HealthIntelligenceService {
     }
 
     return threshold.clamp(38.0, 41.0);
+  }
+
+  // Simple 0-100 health score using this pet's own limits
+  static int calculateHealthScore(CollarData data, Pet pet) {
+    var score = 100;
+
+    final heartRate = data.heartRate?.toDouble();
+    if (heartRate != null) {
+      final maxHr = getIndividualizedHeartRateThreshold(pet);
+      final minHr = getPopulationRestingHeartRateBaseline(pet) * 0.6;
+      if (heartRate > maxHr + 20 || heartRate < minHr * 0.8) {
+        score -= 20;
+      } else if (heartRate > maxHr || heartRate < minHr) {
+        score -= 10;
+      }
+    }
+
+    final temperature = data.temperature;
+    if (temperature != null) {
+      final maxTemp = getIndividualizedTemperatureThreshold(pet);
+      if (temperature > maxTemp + 1.0) {
+        score -= 20;
+      } else if (temperature > maxTemp || temperature < 36.0) {
+        score -= 10;
+      }
+    }
+
+    final spo2 = data.bloodOxygen;
+    if (spo2 != null) {
+      if (spo2 < 90) {
+        score -= 20;
+      } else if (spo2 < 95) {
+        score -= 10;
+      }
+    }
+
+    return score.clamp(0, 100);
   }
 
   // Context-Aware Health Analysis with individualized baselines
