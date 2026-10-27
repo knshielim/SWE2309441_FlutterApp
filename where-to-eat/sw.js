@@ -1,7 +1,7 @@
 // Network first (skipping the browser's HTTP cache) so updates show up straight away;
 // falls back to the saved copy when offline.
-const CACHE = 'w2e-v3';
-const SHELL = ['./', 'index.html', 'styles.css?v=3', 'xmum-data.js?v=3', 'app.js?v=3', 'icon.svg', 'manifest.webmanifest'];
+const CACHE = 'w2e-v4';
+const SHELL = ['./', 'index.html', 'styles.css?v=4', 'xmum-data.js?v=4', 'app.js?v=4', 'icon.svg', 'manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

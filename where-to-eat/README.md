@@ -26,6 +26,21 @@ The **XMUM food** tab lets you browse each area (campus is grouped by block). Dr
 
 To update canteen hours or add places, edit `xmum-data.js`.
 
+### Getting every Bell Suites / Kota Warisan place from Google Maps
+
+The off-campus areas can use Google's full list, with ratings, price levels and real opening hours. A GitHub Action (`.github/workflows/pages.yml`) runs `scripts/fetch-google-places.mjs` every Monday and saves the result to `google-places.json`. Visitors never call Google, so the API key stays secret and usage stays the same however many people use the site (about 32 requests a week, well within Google's free monthly allowance).
+
+Until it's set up, the site uses the starter list and OpenStreetMap instead.
+
+1. **Get an API key.** In the [Google Cloud console](https://console.cloud.google.com/), create a project and enable **Places API (New)**. Google asks you to add a billing account (card), but this usage fits in the free tier. Then go to **APIs & Services → Credentials → Create credentials → API key**. Under **API restrictions**, restrict the key to **Places API (New)**.
+2. **Optional: cap usage so you can never be charged.** Go to **APIs & Services → Places API (New) → Quotas** and set the daily limits for "SearchNearby" and "SearchText" requests to something like 100.
+3. **Add the key to GitHub.** In this repo, go to **Settings → Secrets and variables → Actions → New repository secret**. Name it `GOOGLE_PLACES_API_KEY` and paste the key.
+4. **Let the Action publish the site.** Go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
+5. **Run it now.** Go to **Actions → Update places and deploy site → Run workflow**. When it turns green, open the site. The XMUM food tab should say "from Google Maps, updated …".
+
+After that, it refreshes by itself every Monday.
+
+
 Data is stored in your browser (`localStorage`). Nothing is sent anywhere except the map lookups to OpenStreetMap.
 
 ## Opening hours format

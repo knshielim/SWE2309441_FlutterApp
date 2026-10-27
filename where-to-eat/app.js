@@ -39,7 +39,8 @@ let state = loadState();
 let nearby = [];            // places from OpenStreetMap
 const skipped = new Set();  // "Not today" for this session
 let currentPick = null;
-let xmumLive = { sunsuria: [], warisan: [] }; // OpenStreetMap places around the off-campus areas
+let xmumLive = { sunsuria: [], warisan: [] }; // Google or OpenStreetMap places around the off-campus areas
+let googleUpdated = null; // date of google-places.json, when the site has one
 const XMUM_LIVE_KEY = 'w2e.xmumLive';
 
 function save() {
@@ -84,6 +85,7 @@ const priceLabel = p => (p > 0 ? '$'.repeat(p) : '');
 const starsLabel = r => (r > 0 ? '★'.repeat(r) + '☆'.repeat(5 - r) : '');
 
 function directionsUrl(p) {
+  if (p.mapsUrl) return p.mapsUrl;
   if (p.lat != null) return `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}`;
   if (p.area === 'campus') return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('Xiamen University Malaysia ' + (p.block || ''))}`;
   if (p.address) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + ' ' + p.address + (p.area ? ', Sepang' : ''))}`;
@@ -345,7 +347,8 @@ async function loadNearby(force = false) {
 /* ---------- Favourites ---------- */
 
 const favByOsm = id => state.favourites.find(f => f.osmId === id);
-const allXmum = () => [...XMUM_PLACES, ...xmumLive.sunsuria, ...xmumLive.warisan];
+// With Google data the hand-made off-campus starter list isn't needed
+const allXmum = () => [...XMUM_PLACES.filter(p => !(googleUpdated && p.unverified)), ...xmumLive.sunsuria, ...xmumLive.warisan];
 const findPlace = id => state.favourites.find(f => f.id === id) || nearby.find(p => p.id === id) || allXmum().find(p => p.id === id);
 
 function visitsFor(place) {
@@ -361,9 +364,10 @@ function toggleFavFromNearby(id) {
   const p = findPlace(id) || (currentPick && currentPick.id === id ? currentPick : null);
   if (!p) return;
   state.favourites.unshift({
-    id: 'f_' + uid(), osmId: p.id, name: p.name, cuisine: p.cuisine, list: p.area ? XMUM_AREAS[p.area].short : '', price: 0, rating: 0,
+    id: 'f_' + uid(), osmId: p.id, name: p.name, cuisine: p.cuisine, list: p.area ? XMUM_AREAS[p.area].short : '', price: p.price || 0, rating: 0,
     meals: [], veg: !!p.veg, halal: !!p.halal, hours: p.hours, address: p.address, notes: p.notes || '',
-    lat: p.lat ?? null, lon: p.lon ?? null, source: p.source, area: p.area, block: p.block, kind: p.kind, createdAt: Date.now(),
+    lat: p.lat ?? null, lon: p.lon ?? null, source: p.source, area: p.area, block: p.block, kind: p.kind,
+    mapsUrl: p.mapsUrl, googleRating: p.googleRating, ratingCount: p.ratingCount, createdAt: Date.now(),
   });
   save();
   toast(`Saved ${p.name} to My places`);
@@ -477,6 +481,8 @@ function placeCard(p, { saved, showArea = true }) {
     p.list && `<span class="tag">${esc(p.list)}</span>`,
     p.price ? `<span>${priceLabel(p.price)}</span>` : '',
     p.rating ? `<span class="stars" aria-label="${p.rating} stars">${starsLabel(p.rating)}</span>` : '',
+    p.googleRating ? `<span title="Google rating">⭐ ${p.googleRating.toFixed(1)} (${p.ratingCount.toLocaleString()}) Google</span>` : '',
+    p.closedTemporarily ? '<span class="closed">Temporarily closed</span>' : '',
     open === true ? '<span class="open">Open now</span>' : open === false ? '<span class="closed">Closed now</span>' : '',
     showArea && p.area && XMUM_AREAS[p.area] ? `<span class="tag">${XMUM_AREAS[p.area].icon} ${esc(XMUM_AREAS[p.area].short)}</span>` : '',
     dist != null ? `<span>${fmtDistance(dist)}</span>` : '',
@@ -495,7 +501,7 @@ function placeCard(p, { saved, showArea = true }) {
     </div>
     ${starAction || '<span></span>'}
     ${p.address ? `<div class="notes muted">📍 ${esc(p.address)}</div>` : ''}
-    ${p.hours && p.source === 'xmum' ? `<div class="notes muted">🕘 ${esc(prettyHours(p.hours))}</div>` : ''}
+    ${p.hours ? `<div class="notes muted">🕘 ${esc(prettyHours(p.hours))}</div>` : ''}
     ${p.notes ? `<div class="notes">📝 ${esc(p.notes)}</div>` : ''}
     ${p.unverified && !p.hours ? '<div class="notes muted small">ℹ️ From web listings. Check the hours before you go.</div>' : ''}
     <div class="actions">
@@ -652,7 +658,7 @@ function buildPool() {
   const recent = new Set(state.history.filter(h => h.at >= recentCutoff).flatMap(h => [h.placeId, h.name]));
 
   pool = pool.filter(p => {
-    if (skipped.has(p.id)) return false;
+    if (skipped.has(p.id) || p.closedTemporarily) return false;
     if (f.cuisine && !splitCuisine(p.cuisine).includes(f.cuisine)) return false;
     if (f.price && p.price > f.price) return false;
     if (f.distance) { const d = distanceM(loc, p); if (d != null && d > f.distance) return false; }
@@ -694,7 +700,7 @@ function updatePoolInfo() {
 function weightOf(p) {
   if (!state.settings.filters.weighted) return 1;
   const visits = Math.min(visitsFor(p), 10);
-  return (p.rating ? p.rating : 2.5) + (state.favourites.includes(p) || favByOsm(p.id) ? 1 : 0) + visits * 0.1;
+  return (p.rating || p.googleRating || 2.5) + (state.favourites.includes(p) || favByOsm(p.id) ? 1 : 0) + visits * 0.1;
 }
 
 function weightedPick(pool, exclude = new Set()) {
@@ -755,7 +761,8 @@ function renderResult(p, quiet = false) {
   const dist = distanceM(state.settings.location, p);
   const open = isOpenNow(p.hours);
   const dir = directionsUrl(p);
-  const meta = [p.cuisine, p.list || (p.area && XMUM_AREAS[p.area] ? XMUM_AREAS[p.area].short : ''), priceLabel(p.price), p.rating ? starsLabel(p.rating) : '', dist != null ? fmtDistance(dist) : '',
+  const meta = [p.cuisine, p.list || (p.area && XMUM_AREAS[p.area] ? XMUM_AREAS[p.area].short : ''), priceLabel(p.price), p.rating ? starsLabel(p.rating) : '',
+    p.googleRating ? `⭐ ${p.googleRating.toFixed(1)} on Google` : '', dist != null ? fmtDistance(dist) : '',
     open === true ? 'Open now' : open === false ? 'Closed now' : ''].filter(Boolean).map(esc).join(' · ');
   const savable = !state.favourites.includes(p) && !favByOsm(p.id);
   el.hidden = false;
@@ -765,7 +772,7 @@ function renderResult(p, quiet = false) {
     <div class="name">${esc(p.name)}</div>
     ${meta ? `<div class="meta">${meta}</div>` : ''}
     ${p.address ? `<div class="meta">📍 ${esc(p.address)}</div>` : ''}
-    ${p.hours && p.source === 'xmum' ? `<div class="meta">🕘 ${esc(prettyHours(p.hours))}</div>` : ''}
+    ${p.hours ? `<div class="meta">🕘 ${esc(prettyHours(p.hours))}</div>` : ''}
     ${p.notes ? `<div class="notes">“${esc(p.notes)}”</div>` : ''}
     ${p.unverified && !p.hours ? '<div class="meta small">ℹ️ Hours not checked. Look it up before you go.</div>' : ''}
     <div class="btn-row">
@@ -929,8 +936,10 @@ function applyMode() {
   renderAll();
 }
 
-// Adds OpenStreetMap places around each off-campus area to the built-in list.
+// Places around the off-campus areas: google-places.json (made weekly by the
+// GitHub Action) when the site has it, otherwise OpenStreetMap.
 async function loadXmumLive(force) {
+  if (await loadGooglePlaces()) return;
   if (!force) {
     try {
       const c = JSON.parse(localStorage.getItem(XMUM_LIVE_KEY) || 'null');
@@ -976,20 +985,46 @@ async function loadXmumLive(force) {
   renderAll();
 }
 
+async function loadGooglePlaces() {
+  try {
+    const r = await fetch('google-places.json', { cache: 'no-cache' });
+    if (!r.ok) return false;
+    const data = await r.json();
+    const known = new Set(XMUM_PLACES.filter(p => p.area === 'campus').map(p => normName(p.name)));
+    const live = { sunsuria: [], warisan: [] };
+    for (const area of Object.keys(live)) {
+      live[area] = (data.areas?.[area]?.places || [])
+        .filter(p => p.name && !known.has(normName(p.name)))
+        .map(p => ({ ...p, area, source: 'google' }));
+    }
+    if (!live.sunsuria.length && !live.warisan.length) return false;
+    xmumLive = live;
+    googleUpdated = new Date(data.generatedAt);
+    $('#xmumStatus').textContent = '';
+    renderAll();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function renderXmum() {
   if (!state.settings.xmum) return;
   $$('#xmumAreaSeg button').forEach(b => b.classList.toggle('active', b.dataset.area === xmumView));
+  $('#xmumRefresh').hidden = !!googleUpdated;
   const q = $('#xmumFilter').value.trim().toLowerCase();
   const openOnly = $('#xmumOpenOnly').checked;
   const places = allXmum().filter(p => p.area === xmumView &&
     (!q || [p.name, p.cuisine, p.address, p.notes].join(' ').toLowerCase().includes(q)) &&
     (!openOnly || isOpenNow(p.hours) !== false));
-  const rank = p => ({ true: 0, null: 1, false: 2 })[String(isOpenNow(p.hours))];
+  const rank = p => (p.closedTemporarily ? 3 : { true: 0, null: 1, false: 2 }[String(isOpenNow(p.hours))]);
   places.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 
   $('#xmumNote').textContent = xmumView === 'campus'
     ? 'Hours are from the cafeteria list updated 28 Sep 2026. Hours and off days may change.'
-    : 'Places come from web listings and OpenStreetMap, so hours aren\'t checked. Missing a place? Add it in My places.';
+    : googleUpdated
+      ? `Places, ratings and hours from Google Maps, updated ${googleUpdated.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}. Missing a place? Add it in My places.`
+      : 'Places come from web listings and OpenStreetMap, so hours aren\'t checked. Missing a place? Add it in My places.';
 
   let html;
   if (!places.length) {
@@ -1193,7 +1228,7 @@ function init() {
   else loadNearby(false);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js?v=3').catch(() => { /* offline support is optional */ });
+    navigator.serviceWorker.register('sw.js?v=4').catch(() => { /* offline support is optional */ });
     // When an update takes over from an older version, reload once so the new code runs
     const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;

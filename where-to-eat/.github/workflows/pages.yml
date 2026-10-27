@@ -1,0 +1,56 @@
+# Deploys the site to GitHub Pages. Once a week (and when run by hand from
+# the Actions tab) it first refreshes google-places.json from Google Places.
+name: Update places and deploy site
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 1 * * 1' # Mondays, 9:23am Malaysia time
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        if: github.event_name != 'push' && env.GOOGLE_PLACES_API_KEY != ''
+        with:
+          node-version: 20
+
+      - name: Fetch places from Google
+        if: github.event_name != 'push' && env.GOOGLE_PLACES_API_KEY != ''
+        run: node scripts/fetch-google-places.mjs
+
+      - name: Save the new list to the repo
+        if: github.event_name != 'push' && env.GOOGLE_PLACES_API_KEY != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add google-places.json
+          git diff --cached --quiet || (git commit -m "Update places from Google" && git push)
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
