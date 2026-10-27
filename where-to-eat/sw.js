@@ -1,6 +1,6 @@
 // Network first so updates show up straight away; falls back to the cache when offline.
-const CACHE = 'w2e-v1';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'icon.svg', 'manifest.webmanifest'];
+const CACHE = 'w2e-v2';
+const SHELL = ['./', 'index.html', 'styles.css', 'xmum-data.js', 'app.js', 'icon.svg', 'manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -14,6 +14,18 @@ A small website that helps you decide where to eat. It is plain HTML, CSS and Ja
 - **Backup**: export or import your data as JSON to move it between devices or swap lists with friends.
 - **Installable and works offline** (a PWA), with a dark mode and a phone-friendly layout.
 
+## 🎓 XMUM student mode
+
+Tap **🎓 XMUM** at the top, or turn it on in Settings. The app then picks only from:
+
+- **Campus canteens**: all the stalls in blocks D6, LY3 and B1, plus the A3 / IAEC / Music Island cafés. Opening hours and off days come from the *Cafeteria Operation Hours 2026* list (updated 28 Sep 2026), so "Open now" and the meal filter know about Saturday/Sunday off days and suppers.
+- **Bell Suites & Sunsuria City** and **Kota Warisan**: a starter list from public web listings, plus restaurants that OpenStreetMap has around each area. These places have no checked hours.
+- **My places**, if you leave that chip on.
+
+The **XMUM food** tab lets you browse each area (campus is grouped by block). Drinks, dessert and convenience-store stalls are left out of random picks unless you tick *Include drinks, desserts & convenience stores*.
+
+To update canteen hours or add places, edit `xmum-data.js`.
+
 Data is stored in your browser (`localStorage`). Nothing is sent anywhere except the map lookups to OpenStreetMap.
 
 ## Opening hours format

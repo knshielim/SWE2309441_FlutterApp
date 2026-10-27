@@ -13,7 +13,9 @@ const defaultState = () => ({
     radius: 1000,
     source: 'both',
     location: null, // { lat, lon, label }
-    filters: { cuisine: '', list: '', price: 0, distance: 0, avoid: 0, meal: '', open: false, weighted: true, veg: false, halal: false },
+    xmum: false,
+    xmumAreas: ['campus', 'sunsuria', 'warisan', 'favourites'],
+    filters: { cuisine: '', list: '', price: 0, distance: 0, avoid: 0, meal: '', open: false, weighted: true, veg: false, halal: false, snacks: false },
   },
 });
 
@@ -37,6 +39,8 @@ let state = loadState();
 let nearby = [];            // places from OpenStreetMap
 const skipped = new Set();  // "Not today" for this session
 let currentPick = null;
+let xmumLive = { sunsuria: [], warisan: [] }; // OpenStreetMap places around the off-campus areas
+const XMUM_LIVE_KEY = 'w2e.xmumLive';
 
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -81,7 +85,8 @@ const starsLabel = r => (r > 0 ? '★'.repeat(r) + '☆'.repeat(5 - r) : '');
 
 function directionsUrl(p) {
   if (p.lat != null) return `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}`;
-  if (p.address) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + ' ' + p.address)}`;
+  if (p.area === 'campus') return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('Xiamen University Malaysia ' + (p.block || ''))}`;
+  if (p.address) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + ' ' + p.address + (p.area ? ', Sepang' : ''))}`;
   return null;
 }
 
@@ -161,6 +166,34 @@ function isOpenNow(spec, date = new Date()) {
   return fromYesterday || todayResult === true;
 }
 
+const DAY_NAMES = { Mo: 'Mon', Tu: 'Tue', We: 'Wed', Th: 'Thu', Fr: 'Fri', Sa: 'Sat', Su: 'Sun', PH: 'Public holidays' };
+
+// "Mo-Sa 10:00-24:00; Su off" -> "Mon-Sat 10am–12am · Sun closed"
+function prettyHours(spec) {
+  if (!spec) return '';
+  if (spec.trim() === '24/7') return 'Open 24 hours';
+  return spec.split(';').map(r => r.trim()).filter(Boolean).join(' · ')
+    .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, d => DAY_NAMES[d])
+    .replace(/\boff\b/gi, 'closed')
+    .replace(/(\d{1,2}):(\d{2})/g, (_, h, m) => {
+      h = +h % 24;
+      return `${h % 12 || 12}${m === '00' ? '' : ':' + m}${h < 12 ? 'am' : 'pm'}`;
+    })
+    .replace(/(am|pm)-/g, '$1–')
+    .replace(/,/g, ', ');
+}
+
+// Whether a place is good for a meal: uses the meals the user ticked, otherwise
+// checks the opening hours at a typical time for that meal today.
+const MEAL_TIMES = { breakfast: [8, 30], lunch: [12, 30], dinner: [19, 0], supper: [23, 0] };
+function mealOk(p, meal) {
+  if (p.meals && p.meals.length) return p.meals.includes(meal);
+  if (!p.hours || !MEAL_TIMES[meal]) return true;
+  const d = new Date();
+  d.setHours(MEAL_TIMES[meal][0], MEAL_TIMES[meal][1], 0, 0);
+  return isOpenNow(p.hours, d) !== false;
+}
+
 /* ---------- Location ---------- */
 
 function setLocation(loc) {
@@ -182,7 +215,8 @@ function useMyLocation() {
     const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude, label: 'My location' };
     setLocation(loc);
     reverseGeocode(loc);
-    await loadNearby(true);
+    if (state.settings.xmum) { setNearbyStatus(''); renderAll(); }
+    else await loadNearby(true);
   }, err => {
     setNearbyStatus(err.code === 1
       ? 'Location permission was denied. Search for an area instead.'
@@ -305,7 +339,8 @@ async function loadNearby(force = false) {
 /* ---------- Favourites ---------- */
 
 const favByOsm = id => state.favourites.find(f => f.osmId === id);
-const findPlace = id => state.favourites.find(f => f.id === id) || nearby.find(p => p.id === id);
+const allXmum = () => [...XMUM_PLACES, ...xmumLive.sunsuria, ...xmumLive.warisan];
+const findPlace = id => state.favourites.find(f => f.id === id) || nearby.find(p => p.id === id) || allXmum().find(p => p.id === id);
 
 function visitsFor(place) {
   return state.history.filter(h => h.placeId === place.id || (place.osmId && h.placeId === place.osmId) || h.name === place.name).length;
@@ -317,12 +352,12 @@ function toggleFavFromNearby(id) {
     removeFav(existing.id);
     return;
   }
-  const p = nearby.find(x => x.id === id) || (currentPick && currentPick.id === id ? currentPick : null);
+  const p = findPlace(id) || (currentPick && currentPick.id === id ? currentPick : null);
   if (!p) return;
   state.favourites.unshift({
-    id: 'f_' + uid(), osmId: p.id, name: p.name, cuisine: p.cuisine, list: '', price: 0, rating: 0,
-    meals: [], veg: !!p.veg, halal: !!p.halal, hours: p.hours, address: p.address, notes: '',
-    lat: p.lat, lon: p.lon, source: 'osm', createdAt: Date.now(),
+    id: 'f_' + uid(), osmId: p.id, name: p.name, cuisine: p.cuisine, list: p.area ? XMUM_AREAS[p.area].short : '', price: 0, rating: 0,
+    meals: [], veg: !!p.veg, halal: !!p.halal, hours: p.hours, address: p.address, notes: p.notes || '',
+    lat: p.lat ?? null, lon: p.lon ?? null, source: p.source, area: p.area, block: p.block, kind: p.kind, createdAt: Date.now(),
   });
   save();
   toast(`Saved ${p.name} to My places`);
@@ -413,7 +448,7 @@ function saveFavFromForm() {
 
 function allCuisines() {
   const set = new Set();
-  [...state.favourites, ...nearby].forEach(p => splitCuisine(p.cuisine).forEach(c => set.add(c)));
+  [...state.favourites, ...(state.settings.xmum ? allXmum() : nearby)].forEach(p => splitCuisine(p.cuisine).forEach(c => set.add(c)));
   return [...set].sort();
 }
 const allLists = () => [...new Set(state.favourites.map(f => f.list).filter(Boolean))].sort();
@@ -426,7 +461,7 @@ function fillDatalists() {
 
 /* ---------- Rendering: place cards ---------- */
 
-function placeCard(p, { saved }) {
+function placeCard(p, { saved, showArea = true }) {
   const loc = state.settings.location;
   const dist = distanceM(loc, p);
   const open = isOpenNow(p.hours);
@@ -437,6 +472,7 @@ function placeCard(p, { saved }) {
     p.price ? `<span>${priceLabel(p.price)}</span>` : '',
     p.rating ? `<span class="stars" aria-label="${p.rating} stars">${starsLabel(p.rating)}</span>` : '',
     open === true ? '<span class="open">Open now</span>' : open === false ? '<span class="closed">Closed now</span>' : '',
+    showArea && p.area && XMUM_AREAS[p.area] ? `<span class="tag">${XMUM_AREAS[p.area].icon} ${esc(XMUM_AREAS[p.area].short)}</span>` : '',
     dist != null ? `<span>${fmtDistance(dist)}</span>` : '',
     p.veg ? '<span class="tag">Veg</span>' : '',
     p.halal ? '<span class="tag">Halal</span>' : '',
@@ -453,7 +489,9 @@ function placeCard(p, { saved }) {
     </div>
     ${starAction || '<span></span>'}
     ${p.address ? `<div class="notes muted">📍 ${esc(p.address)}</div>` : ''}
+    ${p.hours && p.source === 'xmum' ? `<div class="notes muted">🕘 ${esc(prettyHours(p.hours))}</div>` : ''}
     ${p.notes ? `<div class="notes">📝 ${esc(p.notes)}</div>` : ''}
+    ${p.unverified && !p.hours ? '<div class="notes muted small">ℹ️ From web listings. Check the hours before you go.</div>' : ''}
     <div class="actions">
       <button class="btn small" data-action="pick-this" data-id="${esc(p.id)}">✅ Eat here</button>
       ${dir ? `<a class="btn small ghost" href="${dir}" target="_blank" rel="noopener">🧭 Directions</a>` : ''}
@@ -544,6 +582,7 @@ function renderFilterOptions() {
 function renderAll() {
   renderFilterOptions();
   renderNearby();
+  renderXmum();
   renderFavourites();
   renderHistory();
   updatePoolInfo();
@@ -564,8 +603,9 @@ function readFilters() {
   f.weighted = $('#fWeighted').checked;
   f.veg = $('#fVeg').checked;
   f.halal = $('#fHalal').checked;
+  f.snacks = $('#fSnacks').checked;
   save();
-  const active = [f.cuisine, f.list, f.price, f.distance, f.avoid, f.meal, f.open, f.veg, f.halal].filter(Boolean).length;
+  const active = [f.cuisine, f.list, f.price, f.distance, f.avoid, f.meal, f.open, f.veg, f.halal, f.snacks].filter(Boolean).length;
   $('#filterCount').textContent = active || '';
 }
 
@@ -579,6 +619,8 @@ function applyFiltersToUI() {
   $('#fWeighted').checked = f.weighted;
   $('#fVeg').checked = f.veg;
   $('#fHalal').checked = f.halal;
+  $('#fSnacks').checked = f.snacks;
+  $$('#areaChips button').forEach(b => b.setAttribute('aria-pressed', state.settings.xmumAreas.includes(b.dataset.area)));
   $('#radius').value = String(state.settings.radius);
   $$('#sourceSeg button').forEach(b => b.classList.toggle('active', b.dataset.source === state.settings.source));
   $$('#sourceSeg button').forEach(b => b.setAttribute('aria-checked', b.dataset.source === state.settings.source));
@@ -589,10 +631,15 @@ function buildPool() {
   const src = state.settings.source;
   const loc = state.settings.location;
   let pool = [];
-  if (src !== 'nearby') pool.push(...state.favourites.filter(p => !f.list || p.list === f.list));
-  if (src !== 'favourites' && !f.list) {
-    const savedOsm = new Set(state.favourites.map(p => p.osmId).filter(Boolean));
-    pool.push(...nearby.filter(p => !savedOsm.has(p.id)));
+  const savedRefs = new Set(state.favourites.map(p => p.osmId).filter(Boolean));
+  if (state.settings.xmum) {
+    const areas = state.settings.xmumAreas;
+    const withFavs = areas.includes('favourites');
+    if (withFavs) pool.push(...state.favourites.filter(p => !f.list || p.list === f.list));
+    if (!f.list) pool.push(...allXmum().filter(p => areas.includes(p.area) && !(withFavs && savedRefs.has(p.id))));
+  } else {
+    if (src !== 'nearby') pool.push(...state.favourites.filter(p => !f.list || p.list === f.list));
+    if (src !== 'favourites' && !f.list) pool.push(...nearby.filter(p => !savedRefs.has(p.id)));
   }
   const total = pool.length;
   const recentCutoff = Date.now() - f.avoid * 864e5;
@@ -604,7 +651,8 @@ function buildPool() {
     if (f.price && p.price > f.price) return false;
     if (f.distance) { const d = distanceM(loc, p); if (d != null && d > f.distance) return false; }
     if (f.avoid && (recent.has(p.id) || recent.has(p.osmId) || recent.has(p.name))) return false;
-    if (f.meal && p.meals && p.meals.length && !p.meals.includes(f.meal)) return false;
+    if (f.meal && !mealOk(p, f.meal)) return false;
+    if (!f.snacks && (p.kind === 'snack' || p.kind === 'store')) return false;
     if (f.open && isOpenNow(p.hours) === false) return false;
     if (f.veg && !p.veg) return false;
     if (f.halal && !p.halal) return false;
@@ -618,7 +666,8 @@ function updatePoolInfo() {
   const src = state.settings.source;
   let msg;
   if (!total) {
-    msg = src === 'favourites' ? 'You have no saved places yet. Add some in My places.'
+    msg = state.settings.xmum ? 'Choose at least one area above.'
+      : src === 'favourites' ? 'You have no saved places yet. Add some in My places.'
       : src === 'nearby' && !state.settings.location ? 'Set your location in the Nearby tab first.'
         : !state.settings.location && !state.favourites.length ? 'Set your location in Nearby, or add places in My places to get started.'
           : 'Nothing to pick from yet.';
@@ -700,9 +749,9 @@ function renderResult(p, quiet = false) {
   const dist = distanceM(state.settings.location, p);
   const open = isOpenNow(p.hours);
   const dir = directionsUrl(p);
-  const meta = [p.cuisine, p.list, priceLabel(p.price), p.rating ? starsLabel(p.rating) : '', dist != null ? fmtDistance(dist) : '',
+  const meta = [p.cuisine, p.list || (p.area && XMUM_AREAS[p.area] ? XMUM_AREAS[p.area].short : ''), priceLabel(p.price), p.rating ? starsLabel(p.rating) : '', dist != null ? fmtDistance(dist) : '',
     open === true ? 'Open now' : open === false ? 'Closed now' : ''].filter(Boolean).map(esc).join(' · ');
-  const savable = p.id.startsWith('osm:') && !favByOsm(p.id);
+  const savable = !state.favourites.includes(p) && !favByOsm(p.id);
   el.hidden = false;
   el.className = quiet ? 'result' : 'result done';
   el.innerHTML = `
@@ -710,7 +759,9 @@ function renderResult(p, quiet = false) {
     <div class="name">${esc(p.name)}</div>
     ${meta ? `<div class="meta">${meta}</div>` : ''}
     ${p.address ? `<div class="meta">📍 ${esc(p.address)}</div>` : ''}
+    ${p.hours && p.source === 'xmum' ? `<div class="meta">🕘 ${esc(prettyHours(p.hours))}</div>` : ''}
     ${p.notes ? `<div class="notes">“${esc(p.notes)}”</div>` : ''}
+    ${p.unverified && !p.hours ? '<div class="meta small">ℹ️ Hours not checked. Look it up before you go.</div>' : ''}
     <div class="btn-row">
       <button class="btn primary" data-action="pick-this" data-id="${esc(p.id)}">✅ Eat here</button>
       ${dir ? `<a class="btn" href="${dir}" target="_blank" rel="noopener">🧭 Directions</a>` : ''}
@@ -842,10 +893,118 @@ function importFile(file) {
   reader.readAsText(file);
 }
 
+/* ---------- XMUM mode ---------- */
+
+let xmumView = 'campus';
+const normName = s => s.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]/g, '');
+
+function setXmumMode(on) {
+  state.settings.xmum = on;
+  save();
+  applyMode();
+  const tab = location.hash.slice(1);
+  if (on && tab === 'nearby') location.hash = '#xmum';
+  else if (!on && tab === 'xmum') location.hash = '#nearby';
+  if (on) { loadXmumLive(false); toast('XMUM mode on 🎓'); }
+  else loadNearby(false);
+}
+
+function applyMode() {
+  const on = state.settings.xmum;
+  document.body.classList.toggle('xmum', on);
+  $('#xmumBtn').setAttribute('aria-pressed', on);
+  $('.tab[data-tab="nearby"]').hidden = on;
+  $('.tab[data-tab="xmum"]').hidden = !on;
+  $('#sourceSeg').hidden = on;
+  $('#areaChips').hidden = !on;
+  $('#heroSub').textContent = on
+    ? 'Choose where to pick from: campus canteens, Sunsuria City or Kota Warisan.'
+    : 'Choose where to pick from, tweak the filters, then spin.';
+  renderAll();
+}
+
+// Adds OpenStreetMap places around each off-campus area to the built-in list.
+async function loadXmumLive(force) {
+  if (!force) {
+    try {
+      const c = JSON.parse(localStorage.getItem(XMUM_LIVE_KEY) || 'null');
+      if (c && Date.now() - c.at < 24 * 3600 * 1000) { xmumLive = c.areas; renderAll(); return; }
+    } catch { /* ignore broken cache */ }
+  }
+  $('#xmumStatus').textContent = 'Loading more places from the map…';
+  $('#xmumRefresh').disabled = true;
+  const known = new Set(XMUM_PLACES.map(p => normName(p.name)));
+  const seen = new Set();
+  const result = { sunsuria: [], warisan: [] };
+  let failed = false;
+  for (const area of ['sunsuria', 'warisan']) {
+    const cfg = XMUM_AREAS[area];
+    try {
+      let centre = null;
+      for (const q of cfg.geocode) {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=my&q=${encodeURIComponent(q)}`);
+        const j = await r.json();
+        if (j.length) { centre = { lat: +j[0].lat, lon: +j[0].lon }; break; }
+      }
+      if (!centre) continue;
+      const data = await fetchOverpass(`[out:json][timeout:25];nwr["amenity"~"^(restaurant|fast_food|cafe|food_court)$"]["name"](around:${cfg.radius},${centre.lat},${centre.lon});out center tags 200;`);
+      for (const el of data.elements) {
+        const p = osmToPlace(el);
+        const n = p.name ? normName(p.name) : '';
+        if (!n || p.lat == null || seen.has(p.id)) continue;
+        // Skip places already in the built-in list (including the campus canteens)
+        if ([...known].some(k => k.length > 3 && n.length > 3 && (k.includes(n) || n.includes(k)))) continue;
+        seen.add(p.id);
+        result[area].push({ ...p, area, kind: 'meal' });
+      }
+    } catch { failed = true; }
+  }
+  $('#xmumRefresh').disabled = false;
+  if (failed && !result.sunsuria.length && !result.warisan.length) {
+    $('#xmumStatus').textContent = 'Could not load extra places from the map. Showing the built-in list.';
+    return;
+  }
+  xmumLive = result;
+  $('#xmumStatus').textContent = '';
+  try { localStorage.setItem(XMUM_LIVE_KEY, JSON.stringify({ at: Date.now(), areas: result })); } catch { /* cache is optional */ }
+  renderAll();
+}
+
+function renderXmum() {
+  if (!state.settings.xmum) return;
+  $$('#xmumAreaSeg button').forEach(b => b.classList.toggle('active', b.dataset.area === xmumView));
+  const q = $('#xmumFilter').value.trim().toLowerCase();
+  const openOnly = $('#xmumOpenOnly').checked;
+  const places = allXmum().filter(p => p.area === xmumView &&
+    (!q || [p.name, p.cuisine, p.address, p.notes].join(' ').toLowerCase().includes(q)) &&
+    (!openOnly || isOpenNow(p.hours) !== false));
+  const rank = p => ({ true: 0, null: 1, false: 2 })[String(isOpenNow(p.hours))];
+  places.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+
+  $('#xmumNote').textContent = xmumView === 'campus'
+    ? 'Hours are from the cafeteria list updated 28 Sep 2026. Hours and off days may change.'
+    : 'Places come from web listings and OpenStreetMap, so hours aren\'t checked. Missing a place? Add it in My places.';
+
+  let html;
+  if (!places.length) {
+    html = '<li class="empty">Nothing matches.</li>';
+  } else if (xmumView === 'campus') {
+    const order = ['D6', 'LY3', 'B1', 'A3', 'IAEC', 'Music Island'];
+    const blocks = [...new Set(places.map(p => p.block))].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    html = blocks.map(bl => `<li class="history-day">${esc(blockLabel(bl))}</li>` +
+      places.filter(p => p.block === bl).map(p => placeCard(p, { saved: false, showArea: false })).join('')).join('');
+  } else {
+    const loc = state.settings.location;
+    if (loc) places.sort((a, b) => (distanceM(loc, a) ?? Infinity) - (distanceM(loc, b) ?? Infinity));
+    html = places.map(p => placeCard(p, { saved: false, showArea: false })).join('');
+  }
+  $('#xmumList').innerHTML = html;
+}
+
 /* ---------- Tabs ---------- */
 
 function showTab(name) {
-  if (!['decide', 'nearby', 'favourites', 'history'].includes(name)) name = 'decide';
+  if (!['decide', 'nearby', 'xmum', 'favourites', 'history'].includes(name)) name = 'decide';
   $$('.panel').forEach(p => { p.hidden = p.id !== `tab-${name}`; });
   $$('.tab').forEach(t => {
     const on = t.dataset.tab === name;
@@ -885,10 +1044,25 @@ function bindEvents() {
     state.settings.source = b.dataset.source;
     save(); applyFiltersToUI(); updatePoolInfo();
   });
-  ['#fCuisine', '#fList', '#fPrice', '#fDistance', '#fAvoid', '#fMeal', '#fOpen', '#fWeighted', '#fVeg', '#fHalal']
+  ['#fCuisine', '#fList', '#fPrice', '#fDistance', '#fAvoid', '#fMeal', '#fOpen', '#fWeighted', '#fVeg', '#fHalal', '#fSnacks']
     .forEach(s => $(s).addEventListener('change', () => { readFilters(); updatePoolInfo(); }));
   $('#spinBtn').onclick = spin;
   $('#threeBtn').onclick = giveThree;
+
+  // XMUM mode
+  $('#xmumBtn').onclick = () => setXmumMode(!state.settings.xmum);
+  $('#xmumToggle').onchange = e => setXmumMode(e.target.checked);
+  $$('#areaChips button').forEach(b => b.onclick = () => {
+    const areas = new Set(state.settings.xmumAreas);
+    areas.has(b.dataset.area) ? areas.delete(b.dataset.area) : areas.add(b.dataset.area);
+    state.settings.xmumAreas = [...areas];
+    save(); applyFiltersToUI(); updatePoolInfo();
+  });
+  $$('#xmumAreaSeg button').forEach(b => b.onclick = () => { xmumView = b.dataset.area; renderXmum(); });
+  $('#xmumFilter').oninput = renderXmum;
+  $('#xmumOpenOnly').onchange = renderXmum;
+  $('#xmumLocBtn').onclick = useMyLocation;
+  $('#xmumRefresh').onclick = () => loadXmumLive(true);
 
   // Nearby
   $('#useLocBtn').onclick = useMyLocation;
@@ -933,7 +1107,7 @@ function bindEvents() {
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     form.when.value = now.toISOString().slice(0, 16);
-    $('#allPlaceNames').innerHTML = [...new Set([...state.favourites, ...nearby].map(p => p.name))].map(n => `<option value="${esc(n)}">`).join('');
+    $('#allPlaceNames').innerHTML = [...new Set([...state.favourites, ...nearby, ...allXmum()].map(p => p.name))].map(n => `<option value="${esc(n)}">`).join('');
     $('#logDialog').showModal();
   };
   $('#cancelLogBtn').onclick = () => $('#logDialog').close();
@@ -943,7 +1117,7 @@ function bindEvents() {
     const name = form.name.value.trim();
     const at = new Date(form.when.value).getTime();
     if (!name || Number.isNaN(at)) return;
-    const p = [...state.favourites, ...nearby].find(x => x.name === name);
+    const p = [...state.favourites, ...nearby, ...allXmum()].find(x => x.name === name);
     state.history.push({ id: 'h_' + uid(), placeId: p ? (p.osmId || p.id) : null, name, at });
     save(); renderAll();
     $('#logDialog').close();
@@ -951,7 +1125,11 @@ function bindEvents() {
   });
 
   // Settings
-  $('#settingsBtn').onclick = () => { $('#themeSel').value = state.settings.theme; $('#settingsDialog').showModal(); };
+  $('#settingsBtn').onclick = () => {
+    $('#themeSel').value = state.settings.theme;
+    $('#xmumToggle').checked = state.settings.xmum;
+    $('#settingsDialog').showModal();
+  };
   $('#themeSel').onchange = () => { state.settings.theme = $('#themeSel').value; save(); applyTheme(); };
   $('#exportBtn').onclick = exportData;
   $('#importFile').onchange = e => { if (e.target.files[0]) importFile(e.target.files[0]); e.target.value = ''; };
@@ -962,8 +1140,9 @@ function bindEvents() {
     if (confirm('Erase all saved places, history and settings on this device? Export a backup first if you want to keep them.')) {
       localStorage.removeItem(KEY);
       localStorage.removeItem(NEARBY_CACHE_KEY);
+      localStorage.removeItem(XMUM_LIVE_KEY);
       state = defaultState(); nearby = []; currentPick = null; skipped.clear();
-      applyTheme(); applyFiltersToUI(); renderLocation(); renderAll();
+      applyTheme(); applyFiltersToUI(); renderLocation(); applyMode();
       $('#result').hidden = true;
       $('#settingsDialog').close();
       toast('Everything erased');
@@ -985,17 +1164,27 @@ function applyTheme() {
   else document.documentElement.setAttribute('data-theme', t);
 }
 
+function buildAreaChips() {
+  $('#areaChips').innerHTML = Object.entries(XMUM_AREAS)
+    .map(([k, a]) => `<button type="button" data-area="${k}">${a.icon} ${esc(a.short)}</button>`).join('') +
+    '<button type="button" data-area="favourites">⭐ My places</button>';
+  $('#xmumAreaSeg').innerHTML = Object.entries(XMUM_AREAS)
+    .map(([k, a]) => `<button type="button" data-area="${k}">${a.icon} ${esc(a.short)}</button>`).join('');
+}
+
 /* ---------- Start ---------- */
 
 function init() {
   applyTheme();
+  buildAreaChips();
   applyFiltersToUI();
   renderLocation();
   bindEvents();
-  renderAll();
+  applyMode();
   readFilters();
   showTab(location.hash.slice(1));
-  loadNearby(false);
+  if (state.settings.xmum) loadXmumLive(false);
+  else loadNearby(false);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is optional */ });

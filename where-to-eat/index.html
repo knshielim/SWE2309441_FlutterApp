@@ -22,12 +22,14 @@
       <span class="dot" aria-hidden="true"></span>
       <span id="locLabel">No location set</span>
     </div>
+    <button class="mode-btn" id="xmumBtn" aria-pressed="false" title="XMUM student mode">🎓 XMUM</button>
     <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙️</button>
   </header>
 
   <nav class="tabs" role="tablist">
     <a href="#decide" class="tab" data-tab="decide" role="tab"><span aria-hidden="true">🎲</span><span>Decide</span></a>
     <a href="#nearby" class="tab" data-tab="nearby" role="tab"><span aria-hidden="true">📍</span><span>Nearby</span></a>
+    <a href="#xmum" class="tab" data-tab="xmum" role="tab" hidden><span aria-hidden="true">🎓</span><span>XMUM food</span></a>
     <a href="#favourites" class="tab" data-tab="favourites" role="tab"><span aria-hidden="true">⭐</span><span>My places</span></a>
     <a href="#history" class="tab" data-tab="history" role="tab"><span aria-hidden="true">🕘</span><span>History</span></a>
   </nav>
@@ -37,13 +39,14 @@
     <section id="tab-decide" class="panel" role="tabpanel">
       <div class="card hero">
         <h1>Where should we eat?</h1>
-        <p class="muted">Choose where to pick from, tweak the filters, then spin.</p>
+        <p class="muted" id="heroSub">Choose where to pick from, tweak the filters, then spin.</p>
 
         <div class="segmented" id="sourceSeg" role="radiogroup" aria-label="Pick from">
           <button data-source="both" role="radio">Everything</button>
           <button data-source="favourites" role="radio">My places</button>
           <button data-source="nearby" role="radio">Nearby only</button>
         </div>
+        <div class="chips" id="areaChips" role="group" aria-label="Pick from these areas" hidden></div>
 
         <details class="filters" id="decideFilters">
           <summary>Filters <span class="badge" id="filterCount"></span></summary>
@@ -94,6 +97,7 @@
             <label class="check"><input type="checkbox" id="fWeighted"> Favour higher-rated places</label>
             <label class="check"><input type="checkbox" id="fVeg"> Vegetarian-friendly</label>
             <label class="check"><input type="checkbox" id="fHalal"> Halal</label>
+            <label class="check"><input type="checkbox" id="fSnacks"> Include drinks, desserts &amp; convenience stores</label>
           </div>
         </details>
 
@@ -144,6 +148,25 @@
       <div id="nearbyStatus" class="status"></div>
       <div id="nearbyMap" class="map" hidden></div>
       <ul id="nearbyList" class="place-list"></ul>
+    </section>
+
+    <!-- XMUM -->
+    <section id="tab-xmum" class="panel" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Food around XMUM</h2>
+        <div class="segmented" id="xmumAreaSeg"></div>
+        <div class="grid2 tight">
+          <input type="search" id="xmumFilter" placeholder="Search name or cuisine" aria-label="Search">
+          <label class="check"><input type="checkbox" id="xmumOpenOnly"> Open now only</label>
+        </div>
+        <p class="muted small" id="xmumNote"></p>
+        <div class="row-between">
+          <button class="btn ghost small" id="xmumLocBtn">📍 Show distances from me</button>
+          <button class="btn ghost small" id="xmumRefresh">↻ Reload map places</button>
+        </div>
+      </div>
+      <div id="xmumStatus" class="status"></div>
+      <ul id="xmumList" class="place-list"></ul>
     </section>
 
     <!-- FAVOURITES -->
@@ -289,6 +312,7 @@
           <option value="dark">Dark</option>
         </select>
       </label>
+      <label class="check"><input type="checkbox" id="xmumToggle"> 🎓 XMUM student mode: campus canteens, Bell Suites/Sunsuria City and Kota Warisan</label>
       <h3>Your data</h3>
       <p class="muted small">Everything is saved in this browser only. Export a backup to move it to another device or share your list with friends.</p>
       <div class="btn-row">
@@ -311,6 +335,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+  <script src="xmum-data.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>
