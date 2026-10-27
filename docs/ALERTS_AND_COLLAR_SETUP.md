@@ -73,3 +73,43 @@ have no summary, so the baselines start from the deploy date.
 
 The Alert history screen lists `users/<uid>/alerts` and lets owners rate each alert useful or not
 useful. Export these (`feedback` field) to report alert relevance in the evaluation.
+
+## 6. Testing without the collar (virtual collar)
+
+`tools/virtual_collar.py` behaves like the ESP32: it sends readings in the same format to
+`ingestCollarData` with its own device token, so the app, alerts and Firestore work as with the real
+collar. It needs Python with `firebase-admin` (setup/seed only) and `pandas scikit-learn joblib`
+(dataset only).
+
+```
+python tools/virtual_collar.py setup --key <service-account.json> --email <your login> --pet Hava
+python tools/virtual_collar.py seed --key <service-account.json>
+python tools/virtual_collar.py run
+```
+
+`setup` pairs a virtual collar (`HavaPaw-ESP32-SIM`) with the pet and uses its active safe zone as
+home. `seed` adds 3 normal days of history so the 3-day averages and the "higher than usual" alert
+work immediately. While `run` is sending (every 30 s), type:
+
+| Command | Effect |
+|---|---|
+| `resting`, `active`, `stressed` | readings for that state |
+| `anomaly fever` / `hypoxia` / `tachycardia` / `dehydration` | readings for that anomaly |
+| `deviation` | resting, but heart rate 45% above normal (tests the GPT-4 baseline alert) |
+| `battery 12` | set the battery level |
+| `outside` / `home` | move outside the safe zone / back |
+| `send`, `status`, `quit` | send now, show state, stop |
+
+Alerts need 2 abnormal readings in a row, then wait 15 minutes (delete `users/<uid>/alertState/<petId>`
+to test again). Re-pair the real collar afterwards; this changes the pet's `collarId`.
+
+Labelled CSV without Firebase (same columns as `export_collar_readings.py`):
+
+```
+python tools/virtual_collar.py dataset --state resting,active,stressed,anomaly:fever --count 100
+python tools/virtual_collar.py dataset --species cat --weight 4.5 --out cat.csv
+```
+
+It prints how the Random Forest classifies each scenario. The file can be used with
+`python havapaw_ml/train_random_forest.py --real-csv <file>` to demo the real-data path, but it is
+simulated data, so do not report it as a real-pet result.

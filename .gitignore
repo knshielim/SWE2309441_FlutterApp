@@ -11,3 +11,6 @@ node_modules/
 
 # Build output
 /havapaw/android/build/
+
+# Virtual collar token (tools/virtual_collar.py setup)
+tools/virtual_collar.json
