@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Where2Eat</title>
+  <meta name="description" content="Can't decide where to eat? Spin for a random place nearby or from your own favourites, including spots that aren't on any map.">
+  <meta name="theme-color" content="#e8590c">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icon.svg" alt="" width="28" height="28">
+      <span>Where2Eat</span>
+    </div>
+    <div class="loc-chip" id="locChip" title="Current location">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="locLabel">No location set</span>
+    </div>
+    <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙️</button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <a href="#decide" class="tab" data-tab="decide" role="tab"><span aria-hidden="true">🎲</span><span>Decide</span></a>
+    <a href="#nearby" class="tab" data-tab="nearby" role="tab"><span aria-hidden="true">📍</span><span>Nearby</span></a>
+    <a href="#favourites" class="tab" data-tab="favourites" role="tab"><span aria-hidden="true">⭐</span><span>My places</span></a>
+    <a href="#history" class="tab" data-tab="history" role="tab"><span aria-hidden="true">🕘</span><span>History</span></a>
+  </nav>
+
+  <main>
+    <!-- DECIDE -->
+    <section id="tab-decide" class="panel" role="tabpanel">
+      <div class="card hero">
+        <h1>Where should we eat?</h1>
+        <p class="muted">Choose where to pick from, tweak the filters, then spin.</p>
+
+        <div class="segmented" id="sourceSeg" role="radiogroup" aria-label="Pick from">
+          <button data-source="both" role="radio">Everything</button>
+          <button data-source="favourites" role="radio">My places</button>
+          <button data-source="nearby" role="radio">Nearby only</button>
+        </div>
+
+        <details class="filters" id="decideFilters">
+          <summary>Filters <span class="badge" id="filterCount"></span></summary>
+          <div class="grid2">
+            <label>Cuisine / tag
+              <select id="fCuisine"><option value="">Any</option></select>
+            </label>
+            <label>List
+              <select id="fList"><option value="">All my places</option></select>
+            </label>
+            <label>Max price
+              <select id="fPrice">
+                <option value="0">Any</option>
+                <option value="1">$</option>
+                <option value="2">$$</option>
+                <option value="3">$$$</option>
+              </select>
+            </label>
+            <label>Max distance
+              <select id="fDistance">
+                <option value="0">Any</option>
+                <option value="300">300 m (walk)</option>
+                <option value="800">800 m</option>
+                <option value="1500">1.5 km</option>
+                <option value="3000">3 km</option>
+              </select>
+            </label>
+            <label>Skip places eaten in last
+              <select id="fAvoid">
+                <option value="0">Don't skip</option>
+                <option value="1">1 day</option>
+                <option value="3">3 days</option>
+                <option value="7">7 days</option>
+              </select>
+            </label>
+            <label>Meal
+              <select id="fMeal">
+                <option value="">Any</option>
+                <option value="breakfast">Breakfast</option>
+                <option value="lunch">Lunch</option>
+                <option value="dinner">Dinner</option>
+                <option value="supper">Supper / late night</option>
+              </select>
+            </label>
+          </div>
+          <div class="checks">
+            <label class="check"><input type="checkbox" id="fOpen"> Open now only</label>
+            <label class="check"><input type="checkbox" id="fWeighted"> Favour higher-rated places</label>
+            <label class="check"><input type="checkbox" id="fVeg"> Vegetarian-friendly</label>
+            <label class="check"><input type="checkbox" id="fHalal"> Halal</label>
+          </div>
+        </details>
+
+        <div class="pool-info" id="poolInfo"></div>
+
+        <div class="spin-row">
+          <button class="btn primary big" id="spinBtn">🎲 Pick for me</button>
+          <button class="btn" id="threeBtn" title="Show three options and choose one">Give me 3</button>
+        </div>
+      </div>
+
+      <div id="result" class="result" hidden></div>
+      <div id="choices" class="choices" hidden></div>
+    </section>
+
+    <!-- NEARBY -->
+    <section id="tab-nearby" class="panel" role="tabpanel" hidden>
+      <div class="card">
+        <div class="loc-controls">
+          <button class="btn primary" id="useLocBtn">📍 Use my location</button>
+          <form id="placeSearch" class="search-form">
+            <input type="search" id="placeQuery" placeholder="…or search an area (e.g. your campus)" aria-label="Search an area">
+            <button class="btn" type="submit">Go</button>
+          </form>
+        </div>
+        <ul id="placeResults" class="place-results" hidden></ul>
+        <div class="grid2 tight">
+          <label>Search radius
+            <select id="radius">
+              <option value="500">500 m</option>
+              <option value="1000">1 km</option>
+              <option value="2000">2 km</option>
+              <option value="5000">5 km</option>
+            </select>
+          </label>
+          <label>Filter results
+            <input type="search" id="nearbyFilter" placeholder="Name or cuisine">
+          </label>
+        </div>
+        <div class="row-between">
+          <div class="segmented small" id="viewSeg">
+            <button data-view="list" class="active">List</button>
+            <button data-view="map">Map</button>
+          </div>
+          <button class="btn ghost" id="refreshNearby">↻ Refresh</button>
+        </div>
+      </div>
+      <div id="nearbyStatus" class="status"></div>
+      <div id="nearbyMap" class="map" hidden></div>
+      <ul id="nearbyList" class="place-list"></ul>
+    </section>
+
+    <!-- FAVOURITES -->
+    <section id="tab-favourites" class="panel" role="tabpanel" hidden>
+      <div class="card">
+        <div class="row-between">
+          <h2>My places</h2>
+          <button class="btn primary" id="addFavBtn">＋ Add a place</button>
+        </div>
+        <p class="muted small">Save spots from Nearby with ☆, or add your own, like the uni canteen stall, a pasar malam or a friend's home cooking.</p>
+        <div class="grid2 tight">
+          <input type="search" id="favFilter" placeholder="Search my places" aria-label="Search my places">
+          <select id="favListFilter" aria-label="Filter by list"><option value="">All lists</option></select>
+        </div>
+        <div class="row-between">
+          <select id="favSort" aria-label="Sort">
+            <option value="recent">Recently added</option>
+            <option value="name">Name A–Z</option>
+            <option value="rating">Top rated</option>
+            <option value="visits">Most visited</option>
+            <option value="distance">Nearest</option>
+          </select>
+          <span class="muted small" id="favCount"></span>
+        </div>
+      </div>
+      <ul id="favList" class="place-list"></ul>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="tab-history" class="panel" role="tabpanel" hidden>
+      <div class="card">
+        <div class="row-between">
+          <h2>Where you've eaten</h2>
+          <button class="btn" id="logMealBtn">＋ Log a meal</button>
+        </div>
+        <div class="stats" id="stats"></div>
+      </div>
+      <ul id="historyList" class="history-list"></ul>
+    </section>
+  </main>
+
+  <!-- Add / edit place dialog -->
+  <dialog id="favDialog">
+    <form method="dialog" id="favForm">
+      <h2 id="favDialogTitle">Add a place</h2>
+      <label>Name *
+        <input name="name" required maxlength="80" placeholder="e.g. Block B canteen – chicken rice">
+      </label>
+      <div class="grid2">
+        <label>Cuisine
+          <input name="cuisine" list="cuisineOptions" placeholder="e.g. Chinese, Malay, Western">
+        </label>
+        <label>List
+          <input name="list" list="listOptions" placeholder="e.g. Uni canteen">
+        </label>
+      </div>
+      <datalist id="cuisineOptions"></datalist>
+      <datalist id="listOptions"></datalist>
+      <div class="grid2">
+        <label>Price
+          <select name="price">
+            <option value="0">Not sure</option>
+            <option value="1">$ – cheap</option>
+            <option value="2">$$ – mid</option>
+            <option value="3">$$$ – treat</option>
+          </select>
+        </label>
+        <label>My rating
+          <select name="rating">
+            <option value="0">Not rated</option>
+            <option value="1">★</option>
+            <option value="2">★★</option>
+            <option value="3">★★★</option>
+            <option value="4">★★★★</option>
+            <option value="5">★★★★★</option>
+          </select>
+        </label>
+      </div>
+      <fieldset class="meals">
+        <legend>Good for</legend>
+        <label class="check"><input type="checkbox" name="meal" value="breakfast"> Breakfast</label>
+        <label class="check"><input type="checkbox" name="meal" value="lunch"> Lunch</label>
+        <label class="check"><input type="checkbox" name="meal" value="dinner"> Dinner</label>
+        <label class="check"><input type="checkbox" name="meal" value="supper"> Supper</label>
+      </fieldset>
+      <div class="checks">
+        <label class="check"><input type="checkbox" name="veg"> Vegetarian-friendly</label>
+        <label class="check"><input type="checkbox" name="halal"> Halal</label>
+      </div>
+      <label>Opening hours
+        <input name="hours" placeholder="e.g. Mo-Fr 08:00-17:00; Sa 08:00-12:00">
+        <span class="hint">Optional. Used by the "Open now" filter. Use <code>24/7</code> for always open.</span>
+      </label>
+      <label>Where is it?
+        <input name="address" maxlength="120" placeholder="e.g. Level 1, Block B">
+      </label>
+      <div class="row-between">
+        <span class="muted small" id="favCoords">No map pin</span>
+        <span>
+          <button type="button" class="btn ghost small" id="pinHereBtn">📍 Pin current location</button>
+          <button type="button" class="btn ghost small" id="clearPinBtn" hidden>Remove pin</button>
+        </span>
+      </div>
+      <label>Notes
+        <textarea name="notes" rows="2" maxlength="300" placeholder="What to order, when it's busy, etc."></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger ghost" id="deleteFavBtn" hidden>Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" value="cancel" id="cancelFavBtn">Cancel</button>
+        <button type="submit" class="btn primary" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Log meal dialog -->
+  <dialog id="logDialog">
+    <form method="dialog" id="logForm">
+      <h2>Log a meal</h2>
+      <label>Place
+        <input name="name" list="allPlaceNames" required placeholder="Pick or type a place">
+      </label>
+      <datalist id="allPlaceNames"></datalist>
+      <label>When
+        <input type="datetime-local" name="when" required>
+      </label>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="cancelLogBtn">Cancel</button>
+        <button type="submit" class="btn primary">Log it</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Settings dialog -->
+  <dialog id="settingsDialog">
+    <form method="dialog">
+      <h2>Settings</h2>
+      <label>Theme
+        <select id="themeSel">
+          <option value="auto">Match my device</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+      <h3>Your data</h3>
+      <p class="muted small">Everything is saved in this browser only. Export a backup to move it to another device or share your list with friends.</p>
+      <div class="btn-row">
+        <button type="button" class="btn" id="exportBtn">⬇ Export backup</button>
+        <label class="btn" for="importFile">⬆ Import backup</label>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn danger ghost" id="clearHistoryBtn">Clear history</button>
+        <button type="button" class="btn danger ghost" id="resetBtn">Erase everything</button>
+      </div>
+      <p class="muted small">Nearby places come from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors. If a spot is missing, add it to My places yourself.</p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button class="btn primary" value="close">Done</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
