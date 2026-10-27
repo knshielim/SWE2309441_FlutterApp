@@ -41,6 +41,9 @@ const skipped = new Set();  // "Not today" for this session
 let currentPick = null;
 let xmumLive = { sunsuria: [], warisan: [] }; // Google or OpenStreetMap places around the off-campus areas
 let googleUpdated = null; // date of google-places.json, when the site has one
+let liveSource = null;     // 'google', 'tomtom' or 'osm': where xmumLive came from
+let liveNames = new Set(); // normalised names in xmumLive, to hide duplicate starter places
+let liveWarning = '';      // why TomTom wasn't used, shown under the list
 const XMUM_LIVE_KEY = 'w2e.xmumLive';
 
 function save() {
@@ -168,12 +171,32 @@ function isOpenNow(spec, date = new Date()) {
   return fromYesterday || todayResult === true;
 }
 
+const hhmm = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+// [[ranges for Monday], …, [ranges for Sunday]] -> "Mo-Fr 08:00-17:00; Sa-Su off"
+function compressDays(byDay) {
+  const rules = [];
+  for (let i = 0; i < 7;) {
+    const ranges = byDay[i].join(',') || 'off';
+    let j = i;
+    while (j + 1 < 7 && (byDay[j + 1].join(',') || 'off') === ranges) j++;
+    rules.push(`${i === j ? DAYS[i] : `${DAYS[i]}-${DAYS[j]}`} ${ranges}`);
+    i = j + 1;
+  }
+  if (rules.length === 1) {
+    const all = rules[0].slice(6);
+    return all === '00:00-24:00' ? '24/7' : all;
+  }
+  return rules.join('; ');
+}
+
 const DAY_NAMES = { Mo: 'Mon', Tu: 'Tue', We: 'Wed', Th: 'Thu', Fr: 'Fri', Sa: 'Sat', Su: 'Sun', PH: 'Public holidays' };
 
 // "Mo-Sa 10:00-24:00; Su off" -> "Mon-Sat 10am–12am · Sun closed"
 function prettyHours(spec) {
   if (!spec) return '';
   if (spec.trim() === '24/7') return 'Open 24 hours';
+  spec = spec.replace(/00:00-24:00/g, 'all day');
   return spec.split(';').map(r => r.trim()).filter(Boolean).join(' · ')
     .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, d => DAY_NAMES[d])
     .replace(/\boff\b/gi, 'closed')
@@ -347,8 +370,11 @@ async function loadNearby(force = false) {
 /* ---------- Favourites ---------- */
 
 const favByOsm = id => state.favourites.find(f => f.osmId === id);
-// With Google data the hand-made off-campus starter list isn't needed
-const allXmum = () => [...XMUM_PLACES.filter(p => !(googleUpdated && p.unverified)), ...xmumLive.sunsuria, ...xmumLive.warisan];
+// Starter places are dropped when Google has the area covered, or when the live list already has them
+const allXmum = () => [
+  ...XMUM_PLACES.filter(p => !p.unverified || (liveSource !== 'google' && !nameIn(liveNames, p.name))),
+  ...xmumLive.sunsuria, ...xmumLive.warisan,
+];
 const findPlace = id => state.favourites.find(f => f.id === id) || nearby.find(p => p.id === id) || allXmum().find(p => p.id === id);
 
 function visitsFor(place) {
@@ -937,13 +963,15 @@ function applyMode() {
 }
 
 // Places around the off-campus areas: google-places.json (made weekly by the
-// GitHub Action) when the site has it, otherwise OpenStreetMap.
+// GitHub Action) when the site has it, then TomTom when config.js has a key,
+// otherwise OpenStreetMap.
 async function loadXmumLive(force) {
   if (await loadGooglePlaces()) return;
+  if (await loadTomTom(force)) return;
   if (!force) {
     try {
       const c = JSON.parse(localStorage.getItem(XMUM_LIVE_KEY) || 'null');
-      if (c && Date.now() - c.at < 24 * 3600 * 1000) { xmumLive = c.areas; renderAll(); return; }
+      if (c && Date.now() - c.at < 24 * 3600 * 1000) { setLive(c.areas, 'osm'); renderAll(); return; }
     } catch { /* ignore broken cache */ }
   }
   $('#xmumStatus').textContent = 'Loading more places from the map…';
@@ -976,13 +1004,153 @@ async function loadXmumLive(force) {
   }
   $('#xmumRefresh').disabled = false;
   if (failed && !result.sunsuria.length && !result.warisan.length) {
-    $('#xmumStatus').textContent = 'Could not load extra places from the map. Showing the built-in list.';
+    $('#xmumStatus').textContent = liveWarning || 'Could not load extra places from the map. Showing the built-in list.';
     return;
   }
-  xmumLive = result;
-  $('#xmumStatus').textContent = '';
+  setLive(result, 'osm');
+  $('#xmumStatus').textContent = liveWarning;
   try { localStorage.setItem(XMUM_LIVE_KEY, JSON.stringify({ at: Date.now(), areas: result })); } catch { /* cache is optional */ }
   renderAll();
+}
+
+function setLive(live, source) {
+  xmumLive = live;
+  liveSource = source;
+  liveNames = new Set([...live.sunsuria, ...live.warisan].map(p => normName(p.name)));
+}
+
+// Loose name match, so "AllAce Bell Avenue" and "AllAce" count as the same place
+function nameIn(set, name) {
+  const n = normName(name);
+  if (n.length < 4) return set.has(n);
+  for (const k of set) if (k.length >= 4 && (k.includes(n) || n.includes(k))) return true;
+  return false;
+}
+
+/* TomTom Search API (free key, no card). Results are kept for this browser
+   session only, so each visit makes a few requests: 2 the very first time to
+   find the areas, then 1–3 per area. */
+
+const TOMTOM_SESSION_KEY = 'w2e.tomtom';
+
+async function tomtom(path, params) {
+  const qs = new URLSearchParams({ key: TOMTOM_KEY, countrySet: 'MY', language: 'en-GB', ...params });
+  const r = await fetch(`https://api.tomtom.com/search/2/${path}.json?${qs}`);
+  if (!r.ok) { const e = new Error(`TomTom ${r.status}`); e.status = r.status; throw e; }
+  return r.json();
+}
+
+async function tomtomCentre(area) {
+  const key = 'w2e.centre.' + area;
+  try { const c = JSON.parse(localStorage.getItem(key) || 'null'); if (c) return c; } catch { /* look it up again */ }
+  for (const q of XMUM_AREAS[area].geocode) {
+    const j = await tomtom(`geocode/${encodeURIComponent(q)}`, { limit: 1 });
+    const pos = j.results?.[0]?.position;
+    if (pos) {
+      const c = { lat: pos.lat, lon: pos.lon };
+      try { localStorage.setItem(key, JSON.stringify(c)); } catch { /* optional */ }
+      return c;
+    }
+  }
+  return null;
+}
+
+// TomTom gives opening times for the next seven dates; turn them into a weekly rule
+function tomtomHours(opening) {
+  const ranges = opening?.timeRanges;
+  if (!ranges || !ranges.length) return '';
+  const byDay = DAYS.map(() => []);
+  for (const { startTime: s, endTime: e } of ranges) {
+    const start = new Date(`${s.date}T00:00:00`);
+    const end = new Date(`${e.date}T00:00:00`);
+    const days = Math.round((end - start) / 864e5);
+    if (Number.isNaN(days)) continue;
+    const day = (start.getDay() + 6) % 7;
+    if (days <= 0) byDay[day].push(`${hhmm(s.hour, s.minute)}-${hhmm(e.hour, e.minute)}`);
+    else if (days === 1 && (e.hour * 60 + e.minute) <= (s.hour * 60 + s.minute)) {
+      byDay[day].push(`${hhmm(s.hour, s.minute)}-${e.hour === 0 && e.minute === 0 ? '24:00' : hhmm(e.hour, e.minute)}`);
+    } else {
+      // Open across several whole days
+      for (let i = 0; i < Math.min(days, 7); i++) byDay[(day + i) % 7].push(i === 0 ? `${hhmm(s.hour, s.minute)}-24:00` : '00:00-24:00');
+    }
+  }
+  if (byDay.every(d => !d.length)) return '';
+  for (const d of byDay) { const u = [...new Set(d)]; d.length = 0; d.push(...u.sort()); }
+  return compressDays(byDay);
+}
+
+function tomtomToPlace(r, area) {
+  const poi = r.poi || {};
+  const cats = (poi.categories || []).filter(c => !/^(restaurant|café\/pub|cafe\/pub)$/i.test(c));
+  return {
+    id: 'tt:' + r.id,
+    name: poi.name || '',
+    cuisine: cats.map(titleCase).join(', ') || ((poi.categories || []).some(c => /caf/i.test(c)) ? 'Café' : 'Restaurant'),
+    lat: r.position?.lat, lon: r.position?.lon,
+    address: r.address?.freeformAddress || '',
+    hours: tomtomHours(poi.openingHours),
+    website: poi.url ? (/^https?:/i.test(poi.url) ? poi.url : 'https://' + poi.url) : '',
+    phone: poi.phone || '',
+    area, kind: 'meal', source: 'tomtom',
+  };
+}
+
+async function loadTomTom(force) {
+  if (typeof TOMTOM_KEY !== 'string' || !TOMTOM_KEY.trim()) return false;
+  if (!force) {
+    try {
+      const c = JSON.parse(sessionStorage.getItem(TOMTOM_SESSION_KEY) || 'null');
+      if (c) { setLive(c, 'tomtom'); renderAll(); return true; }
+    } catch { /* fetch again */ }
+  }
+  $('#xmumStatus').textContent = 'Loading places from TomTom…';
+  $('#xmumRefresh').disabled = true;
+  const known = new Set(XMUM_PLACES.filter(p => p.area === 'campus').map(p => normName(p.name)));
+  const seen = new Set();
+  const live = { sunsuria: [], warisan: [] };
+  try {
+    for (const area of Object.keys(live)) {
+      const centre = await tomtomCentre(area);
+      if (!centre) continue;
+      // 7315 = restaurants, 9376 = cafés/pubs; fall back to restaurants only if TomTom rejects that
+      for (const categorySet of ['7315,9376', '7315']) {
+        try {
+          for (let ofs = 0; ofs < 300; ofs += 100) {
+            const j = await tomtom('nearbySearch/', {
+              lat: centre.lat, lon: centre.lon, radius: XMUM_AREAS[area].radius,
+              limit: 100, ofs, categorySet, openingHours: 'nextSevenDays',
+            });
+            for (const r of j.results || []) {
+              const p = tomtomToPlace(r, area);
+              if (!p.name || p.lat == null || seen.has(p.id) || nameIn(known, p.name)) continue;
+              seen.add(p.id);
+              live[area].push(p);
+            }
+            if ((j.results || []).length < 100 || ofs + 100 >= (j.summary?.totalResults ?? 0)) break;
+          }
+          break;
+        } catch (e) {
+          if (e.status !== 400 || categorySet === '7315') throw e;
+        }
+      }
+    }
+  } catch (e) {
+    $('#xmumRefresh').disabled = false;
+    liveWarning = e.status === 403 || e.status === 401
+      ? 'TomTom refused the API key. Check the key in config.js and the allowed domains on developer.tomtom.com.'
+      : e.status === 429 ? 'TomTom\'s free daily limit is used up. Showing other places until tomorrow.'
+        : 'Could not reach TomTom. Showing other places instead.';
+    $('#xmumStatus').textContent = liveWarning;
+    return false;
+  }
+  $('#xmumRefresh').disabled = false;
+  if (!live.sunsuria.length && !live.warisan.length) return false;
+  setLive(live, 'tomtom');
+  liveWarning = '';
+  try { sessionStorage.setItem(TOMTOM_SESSION_KEY, JSON.stringify(live)); } catch { /* optional */ }
+  $('#xmumStatus').textContent = '';
+  renderAll();
+  return true;
 }
 
 async function loadGooglePlaces() {
@@ -998,7 +1166,7 @@ async function loadGooglePlaces() {
         .map(p => ({ ...p, area, source: 'google' }));
     }
     if (!live.sunsuria.length && !live.warisan.length) return false;
-    xmumLive = live;
+    setLive(live, 'google');
     googleUpdated = new Date(data.generatedAt);
     $('#xmumStatus').textContent = '';
     renderAll();
@@ -1011,7 +1179,7 @@ async function loadGooglePlaces() {
 function renderXmum() {
   if (!state.settings.xmum) return;
   $$('#xmumAreaSeg button').forEach(b => b.classList.toggle('active', b.dataset.area === xmumView));
-  $('#xmumRefresh').hidden = !!googleUpdated;
+  $('#xmumRefresh').hidden = liveSource === 'google';
   const q = $('#xmumFilter').value.trim().toLowerCase();
   const openOnly = $('#xmumOpenOnly').checked;
   const places = allXmum().filter(p => p.area === xmumView &&
@@ -1022,9 +1190,11 @@ function renderXmum() {
 
   $('#xmumNote').textContent = xmumView === 'campus'
     ? 'Hours are from the cafeteria list updated 28 Sep 2026. Hours and off days may change.'
-    : googleUpdated
+    : liveSource === 'google'
       ? `Places, ratings and hours from Google Maps, updated ${googleUpdated.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}. Missing a place? Add it in My places.`
-      : 'Places come from web listings and OpenStreetMap, so hours aren\'t checked. Missing a place? Add it in My places.';
+      : liveSource === 'tomtom'
+        ? 'Places and opening hours from TomTom (© TomTom), plus a few from web listings. Missing a place? Add it in My places.'
+        : 'Places come from web listings and OpenStreetMap, so hours aren\'t checked. Missing a place? Add it in My places.';
 
   let html;
   if (!places.length) {
@@ -1228,7 +1398,7 @@ function init() {
   else loadNearby(false);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js?v=4').catch(() => { /* offline support is optional */ });
+    navigator.serviceWorker.register('sw.js?v=5').catch(() => { /* offline support is optional */ });
     // When an update takes over from an older version, reload once so the new code runs
     const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;

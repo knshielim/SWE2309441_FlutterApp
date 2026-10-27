@@ -1,7 +1,8 @@
 // Fetches restaurants and cafés around the off-campus XMUM areas from the
 // Google Places API (New) and writes them to google-places.json for the site.
 //
-// Run by .github/workflows/pages.yml with the GOOGLE_PLACES_API_KEY secret.
+// Run by the GitHub Action in scripts/google-places-workflow.yml (once moved to
+// .github/workflows/pages.yml) with the GOOGLE_PLACES_API_KEY secret.
 // To run it yourself: GOOGLE_PLACES_API_KEY=... node scripts/fetch-google-places.mjs
 //
 // Each run makes about 32 requests (1 text search + 15 nearby searches per

@@ -26,17 +26,29 @@ The **XMUM food** tab lets you browse each area (campus is grouped by block). Dr
 
 To update canteen hours or add places, edit `xmum-data.js`.
 
+### Getting places from TomTom (free, no card)
+
+TomTom's Search API knows far more Bell Suites / Sunsuria City and Kota Warisan places than OpenStreetMap, along with opening hours. It's free for 2,500 requests a day without a credit card, and one visit uses about 2–6 requests.
+
+1. Sign up at [developer.tomtom.com](https://developer.tomtom.com/) (email only) and open your **Dashboard → Keys**. Copy your API key.
+2. Lock the key to your site: click **⋯ → Edit** on the key and add these to the domain whitelist: `knshielim.github.io` (add `localhost` too if you test locally). Then save.
+3. In this repo, open `config.js`, click ✏️, paste the key between the quotes (`const TOMTOM_KEY = 'your-key';`), and commit.
+4. After a minute or two, open the site in XMUM mode. The XMUM food tab should say "Places and opening hours from TomTom".
+
+If the key is missing or refused, the site falls back to OpenStreetMap and says why under the list.
+
 ### Getting every Bell Suites / Kota Warisan place from Google Maps
 
-The off-campus areas can use Google's full list, with ratings, price levels and real opening hours. A GitHub Action (`.github/workflows/pages.yml`) runs `scripts/fetch-google-places.mjs` every Monday and saves the result to `google-places.json`. Visitors never call Google, so the API key stays secret and usage stays the same however many people use the site (about 32 requests a week, well within Google's free monthly allowance).
+This is optional and needs a Google Cloud billing account (card). The off-campus areas can use Google's full list, with ratings, price levels and real opening hours. A GitHub Action (`scripts/google-places-workflow.yml`) runs `scripts/fetch-google-places.mjs` every Monday and saves the result to `google-places.json`. Visitors never call Google, so the API key stays secret and usage stays the same however many people use the site (about 32 requests a week, well within Google's free monthly allowance).
 
-Until it's set up, the site uses the starter list and OpenStreetMap instead.
+Until it's set up, the site uses TomTom (if `config.js` has a key) or OpenStreetMap instead.
 
-1. **Get an API key.** In the [Google Cloud console](https://console.cloud.google.com/), create a project and enable **Places API (New)**. Google asks you to add a billing account (card), but this usage fits in the free tier. Then go to **APIs & Services → Credentials → Create credentials → API key**. Under **API restrictions**, restrict the key to **Places API (New)**.
-2. **Optional: cap usage so you can never be charged.** Go to **APIs & Services → Places API (New) → Quotas** and set the daily limits for "SearchNearby" and "SearchText" requests to something like 100.
-3. **Add the key to GitHub.** In this repo, go to **Settings → Secrets and variables → Actions → New repository secret**. Name it `GOOGLE_PLACES_API_KEY` and paste the key.
-4. **Let the Action publish the site.** Go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
-5. **Run it now.** Go to **Actions → Update places and deploy site → Run workflow**. When it turns green, open the site. The XMUM food tab should say "from Google Maps, updated …".
+1. **Turn on the Action.** Move `scripts/google-places-workflow.yml` to `.github/workflows/pages.yml`.
+2. **Get an API key.** In the [Google Cloud console](https://console.cloud.google.com/), create a project and enable **Places API (New)**. Google asks you to add a billing account (card), but this usage fits in the free tier. Then go to **APIs & Services → Credentials → Create credentials → API key**. Under **API restrictions**, restrict the key to **Places API (New)**.
+3. **Optional: cap usage so you can never be charged.** Go to **APIs & Services → Places API (New) → Quotas** and set the daily limits for "SearchNearby" and "SearchText" requests to something like 100.
+4. **Add the key to GitHub.** In this repo, go to **Settings → Secrets and variables → Actions → New repository secret**. Name it `GOOGLE_PLACES_API_KEY` and paste the key.
+5. **Let the Action publish the site.** Go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
+6. **Run it now.** Go to **Actions → Update places and deploy site → Run workflow**. When it turns green, open the site. The XMUM food tab should say "from Google Maps, updated …".
 
 After that, it refreshes by itself every Monday.
 
