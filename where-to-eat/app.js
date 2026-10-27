@@ -258,7 +258,13 @@ async function searchArea(q) {
 
 /* ---------- Nearby (OpenStreetMap Overpass) ---------- */
 
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+// Public Overpass servers, tried in turn because any one of them can be busy
+const OVERPASS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
 
 function setNearbyStatus(msg) { $('#nearbyStatus').textContent = msg; }
 
@@ -288,7 +294,7 @@ async function fetchOverpass(query) {
   for (const url of OVERPASS) {
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 25000);
+      const timer = setTimeout(() => ctrl.abort(), 20000);
       const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(query), signal: ctrl.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
       clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -328,7 +334,7 @@ async function loadNearby(force = false) {
     try { localStorage.setItem(NEARBY_CACHE_KEY, JSON.stringify({ lat: loc.lat, lon: loc.lon, radius, at: Date.now(), places: nearby })); } catch { /* cache is optional */ }
     setNearbyStatus(nearby.length ? '' : 'No places found on the map here. Try a bigger radius, or add your own in My places.');
   } catch {
-    setNearbyStatus('Could not reach the map service. Check your connection and tap Refresh.');
+    setNearbyStatus('The map servers are busy right now. Tap Refresh to try again in a minute. My places still work.');
   } finally {
     $('#refreshNearby').disabled = false;
   }
@@ -1187,7 +1193,13 @@ function init() {
   else loadNearby(false);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is optional */ });
+    navigator.serviceWorker.register('sw.js?v=3').catch(() => { /* offline support is optional */ });
+    // When an update takes over from an older version, reload once so the new code runs
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController && !reloaded) { reloaded = true; location.reload(); }
+    });
   }
 }
 

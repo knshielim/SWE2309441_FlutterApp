@@ -10,7 +10,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
   <header class="topbar">
@@ -325,6 +325,7 @@
         <button type="button" class="btn danger ghost" id="resetBtn">Erase everything</button>
       </div>
       <p class="muted small">Nearby places come from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors. If a spot is missing, add it to My places yourself.</p>
+      <p class="muted small">Version 3</p>
       <div class="dialog-actions">
         <span class="spacer"></span>
         <button class="btn primary" value="close">Done</button>
@@ -335,7 +336,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
-  <script src="xmum-data.js" defer></script>
-  <script src="app.js" defer></script>
+  <script src="xmum-data.js?v=3" defer></script>
+  <script src="app.js?v=3" defer></script>
 </body>
 </html>
