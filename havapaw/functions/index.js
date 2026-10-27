@@ -232,19 +232,20 @@ Temperature: ${reading.temperature ?? "n/a"} degC. SpO2: ${reading.bloodOxygen ?
 async function sendPush(uid, petId, alert) {
   const tokensSnap = await db.collection("users").doc(uid).collection("fcmTokens").get();
   const tokens = tokensSnap.docs.map((d) => d.id);
-  await db.collection("users").doc(uid).collection("alerts").add({
+  const record = {
     petId,
     type: alert.type,
     severity: alert.severity,
     title: alert.title,
     body: alert.body,
-    ...(alert.deviation !== undefined && {
-      deviation: alert.deviation,
-      baselineHr: alert.baselineHr,
-      generatedBy: alert.generatedBy || "fallback",
-    }),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  };
+  if (alert.type === "baselineDeviation") {
+    record.deviation = alert.deviation;
+    record.baselineHr = alert.baselineHr;
+    record.generatedBy = alert.generatedBy || "fallback";
+  }
+  await db.collection("users").doc(uid).collection("alerts").add(record);
   if (tokens.length === 0) return;
   const result = await admin.messaging().sendEachForMulticast({
     tokens,

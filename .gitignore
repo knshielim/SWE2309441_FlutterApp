@@ -5,3 +5,9 @@ secrets.h.cpp
 /havapaw_ml/data/real_readings*.csv
 *service-account*.json
 *-firebase-adminsdk-*.json
+
+# Installed with npm install
+node_modules/
+
+# Build output
+/havapaw/android/build/

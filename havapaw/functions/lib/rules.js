@@ -152,13 +152,11 @@ function deviationCheck(reading, daily, today) {
   return { state, baselineHr: base.mean, deviation, baselineDays: base.days };
 }
 
-const APP_TIME_ZONE = "Asia/Kuala_Lumpur";
 const APP_RESTING_STEPS_CUTOFF = 150;
 
-function localDayKey(ms, timeZone = APP_TIME_ZONE) {
-  // en-CA formats as YYYY-MM-DD
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
-    .format(new Date(ms));
+// Day in Malaysia time (UTC+8) as YYYY-MM-DD
+function localDayKey(ms) {
+  return new Date(ms + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 function dailySummaryIncrements(reading) {

@@ -70,8 +70,7 @@ class HealthIntelligenceService {
       base = 170.0;
     } else {
       final sizeClass = dogSizeClass(pet.weight);
-      // Real resting heart rate (Invoxia, 40 dogs); same values as generate_dataset.py.
-      // No toy or giant dogs in that data: toy uses small, giant uses large.
+      // Real resting HR from Invoxia (toy uses small, giant uses large)
       base = switch (sizeClass) {
         'toy' => 59.7,
         'small' => 59.7,

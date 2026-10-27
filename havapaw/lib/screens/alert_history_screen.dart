@@ -69,21 +69,37 @@ class _AlertTile extends StatelessWidget {
 
   const _AlertTile({required this.alert});
 
-  static (IconData, Color) _style(String type) {
+  static IconData _iconFor(String type) {
     switch (type) {
       case 'highHeartRate':
       case 'baselineDeviation':
-        return (Icons.favorite_rounded, AppColors.alertRed);
+        return Icons.favorite_rounded;
       case 'stressWarning':
-        return (Icons.psychology_rounded, AppColors.amber);
+        return Icons.psychology_rounded;
       case 'highTemperature':
-        return (Icons.thermostat_rounded, AppColors.amber);
+        return Icons.thermostat_rounded;
       case 'geofenceExit':
-        return (Icons.location_off_rounded, AppColors.alertRed);
+        return Icons.location_off_rounded;
       case 'lowBattery':
-        return (Icons.battery_alert_rounded, AppColors.slateDark);
+        return Icons.battery_alert_rounded;
       default:
-        return (Icons.notifications_rounded, AppColors.primaryTeal);
+        return Icons.notifications_rounded;
+    }
+  }
+
+  static Color _colorFor(String type) {
+    switch (type) {
+      case 'highHeartRate':
+      case 'baselineDeviation':
+      case 'geofenceExit':
+        return AppColors.alertRed;
+      case 'stressWarning':
+      case 'highTemperature':
+        return AppColors.amber;
+      case 'lowBattery':
+        return AppColors.slateDark;
+      default:
+        return AppColors.primaryTeal;
     }
   }
 
@@ -94,7 +110,8 @@ class _AlertTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color) = _style(alert.type);
+    final icon = _iconFor(alert.type);
+    final color = _colorFor(alert.type);
     final created = alert.createdAt;
 
     return Container(

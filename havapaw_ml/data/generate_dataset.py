@@ -37,8 +37,7 @@ ACTIVITY_CAL = (CAL or {}).get("activity_index", {}) if USE_EXTERNAL_ACTIVITY el
 HR_SD = (CAL or {}).get("invoxia", {}).get("between_dog_sd", 8.0)
 
 
-# Real dog resting heart rate (Invoxia) by size. Invoxia has no toy or giant
-# dogs, so toy uses the small value and giant the large value.
+# Real dog resting HR from Invoxia (toy uses small, giant uses large)
 def dog_hr_override():
     measured = (CAL or {}).get("invoxia", {}).get("dog_resting_hr_override", {})
     if not USE_EXTERNAL_DOG_HR or not {"small", "medium", "large"} <= measured.keys():
