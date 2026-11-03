@@ -10,6 +10,17 @@ python distill_to_tflite.py --copy-to-app
 ```
 Needs `pandas scikit-learn joblib tensorflow`. Results go to `reports/rf_evaluation_report.md`.
 
+## Model comparison and report figures
+```
+python compare_models.py
+python make_figures.py
+```
+Needs `matplotlib seaborn` as well. `compare_models.py` compares a majority-class baseline, Logistic
+Regression, Decision Tree, Random Forest and SVM with the same grouped 5-fold cross-validation, tries a
+few Random Forest settings and lists highly correlated features (`reports/model_comparison.md`).
+`make_figures.py` saves charts to `reports/figures/`: class distribution, features by class,
+correlation heatmap, confusion matrix, feature importance and the model comparison.
+
 ## Test on real collar readings
 ```
 python export_collar_readings.py --key <service-account.json> --email <your login> --labels my_labels.csv
