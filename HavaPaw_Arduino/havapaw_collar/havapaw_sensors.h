@@ -2,6 +2,8 @@
 // Collar sensors: heart rate, SpO2, temperature, steps, battery
 #include <stdint.h>
 
+#define DISABLE_BROWNOUT_DETECTOR 1
+
 static const float    STEP_THRESHOLD_G       = 0.25f;  // |a| must exceed its slow average by this much
 static const uint32_t MIN_STEP_INTERVAL_MS   = 250;    // ignore peaks closer than this (max ~4 steps/s)
 
