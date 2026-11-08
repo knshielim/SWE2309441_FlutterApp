@@ -195,6 +195,7 @@ class _MapScreenState extends State<MapScreen> {
                     return StreamBuilder<List<Geofence>>(
                       stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
                       builder: (context, geofenceSnapshot) {
+                        if (geofenceSnapshot.hasError) debugPrint('Geofence stream error: ${geofenceSnapshot.error}');
                         final geofences = geofenceSnapshot.data ?? [];
                         final hasActiveGeofence = geofences.isNotEmpty;
 
@@ -317,7 +318,8 @@ class _MapScreenState extends State<MapScreen> {
                                 child: StreamBuilder<List<Geofence>>(
                                   stream: GeofenceService.getGeofencesForPet(pet.id ?? ''),
                                   builder: (context, geofenceSnapshot) {
-                                    final geofences = geofenceSnapshot.data ?? [];
+                                    if (geofenceSnapshot.hasError) debugPrint('Geofence stream error: ${geofenceSnapshot.error}');
+                        final geofences = geofenceSnapshot.data ?? [];
                                     return _buildInteractiveMap(pet, geofences, petLocation);
                                   },
                                 ),
@@ -758,7 +760,13 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate() || _selectedLocation == null) return;
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('choose_zone_location'.tr())),
+      );
+      return;
+    }
     setState(() => _isLoading = true);
 
     final geofence = Geofence(
@@ -772,8 +780,17 @@ class _GeofenceFormSheetState extends State<_GeofenceFormSheet> {
       createdAt: _editingGeofence?.createdAt ?? DateTime.now(),
     );
 
-    await widget.onSave(geofence);
-    setState(() => _isLoading = false);
+    try {
+      await widget.onSave(geofence);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${'error_saving_zone'.tr()}: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _delete() async {

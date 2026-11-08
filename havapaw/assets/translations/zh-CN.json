@@ -393,5 +393,7 @@
   "delete": "删除",
   "email": "电子邮件",
   "new_email": "新电子邮件",
-  "pet_on_walk_desc": "遛狗模式已开启，安全区域提醒已暂停。"
+  "pet_on_walk_desc": "遛狗模式已开启，安全区域提醒已暂停。",
+  "choose_zone_location": "点击地图（或使用当前位置）选择安全区域的中心。",
+  "error_saving_zone": "无法保存安全区域"
 }

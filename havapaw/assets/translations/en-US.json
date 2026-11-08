@@ -379,5 +379,7 @@
   "selected": "Selected",
   "update": "Update",
   "zone_name": "Zone Name",
-  "zone_name_hint": "e.g. Home, Park"
+  "zone_name_hint": "e.g. Home, Park",
+  "choose_zone_location": "Tap the map (or use your current location) to choose the safe zone's centre.",
+  "error_saving_zone": "Could not save the safe zone"
 }

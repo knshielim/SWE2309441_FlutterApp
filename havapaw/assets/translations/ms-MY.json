@@ -393,5 +393,7 @@
   "delete": "Padam",
   "email": "E-mel",
   "new_email": "E-mel baharu",
-  "pet_on_walk_desc": "Mod berjalan aktif, jadi amaran zon selamat dijeda."
+  "pet_on_walk_desc": "Mod berjalan aktif, jadi amaran zon selamat dijeda.",
+  "choose_zone_location": "Ketik peta (atau gunakan lokasi semasa anda) untuk memilih pusat zon selamat.",
+  "error_saving_zone": "Tidak dapat menyimpan zon selamat"
 }

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Geofence {
   final String? id;
   final String petId;
@@ -42,7 +44,14 @@ class Geofence {
       longitude: (map['longitude'] ?? 0.0).toDouble(),
       radius: (map['radius'] ?? 100.0).toDouble(),
       isActive: map['isActive'] ?? true,
-      createdAt: DateTime.parse(map['createdAt'] ?? DateTime.now().toIso8601String()),
+      createdAt: _parseDate(map['createdAt']),
     );
+  }
+
+  // createdAt is a Firestore Timestamp for new zones and an ISO string for older ones
+  static DateTime _parseDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    return DateTime.now();
   }
 }

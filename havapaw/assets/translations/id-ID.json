@@ -393,5 +393,7 @@
   "delete": "Hapus",
   "email": "Email",
   "new_email": "Email baru",
-  "pet_on_walk_desc": "Mode jalan-jalan aktif, jadi peringatan zona aman dijeda."
+  "pet_on_walk_desc": "Mode jalan-jalan aktif, jadi peringatan zona aman dijeda.",
+  "choose_zone_location": "Ketuk peta (atau gunakan lokasi Anda saat ini) untuk memilih pusat zona aman.",
+  "error_saving_zone": "Gagal menyimpan zona aman"
 }

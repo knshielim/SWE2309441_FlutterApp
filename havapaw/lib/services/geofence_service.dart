@@ -22,20 +22,24 @@ class GeofenceService {
     });
   }
 
-  // Returns geofences for one pet.
+  // Returns active geofences for one pet. Sorted here rather than with orderBy,
+  // so the query needs no composite index.
   static Stream<QuerySnapshot> getGeofencesForPetStream(String petId) {
     return _geofencesRef
         .where('petId', isEqualTo: petId)
         .where('isActive', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
         .snapshots();
   }
 
-  // Returns a list of geofences for one pet (convenience method).
+  // Returns a list of geofences for one pet, newest first.
   static Stream<List<Geofence>> getGeofencesForPet(String petId) {
-    return getGeofencesForPetStream(petId).map((snapshot) => snapshot.docs
-        .map((doc) => Geofence.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-        .toList());
+    return getGeofencesForPetStream(petId).map((snapshot) {
+      final zones = snapshot.docs
+          .map((doc) => Geofence.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .toList();
+      zones.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return zones;
+    });
   }
 
   // Updates an existing geofence.
