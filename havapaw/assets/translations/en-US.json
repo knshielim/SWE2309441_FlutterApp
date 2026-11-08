@@ -316,7 +316,7 @@
   "available_devices": "Available Devices",
   "searching_devices": "Searching for devices...",
   "no_devices_found": "No devices found",
-  "no_devices_found_hint": "No ESP32 collar found. Flash the HavaPaw firmware, turn the collar on, and make sure Bluetooth + Location are enabled.",
+  "no_devices_found_hint": "No collar found. Make sure the collar is powered on (battery charged, or the ESP32 plugged into USB) and that Bluetooth and Location are on. A collar that is already paired only shows up for 5 minutes after it is switched on, so restart it and scan again.",
   "tap_scan_retry": "Tap scan to search again",
   "esp32_device": "ESP32 Device",
   "connection_success": "Connection Successful",

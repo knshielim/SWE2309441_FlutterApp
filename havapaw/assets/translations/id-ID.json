@@ -313,7 +313,7 @@
   "baseline_calibrating_progress": "Kalibrasi baseline: hari {days} dari {total}",
   "baseline_fully_personalized": "Baseline sepenuhnya dipersonalisasi untuk hewan ini",
   "esp32_setup_hint": "Pastikan collar menyala dan dekat. Setelah pairing BLE, masukkan WiFi agar data kesehatan tersinkron ke cloud.",
-  "no_devices_found_hint": "Collar ESP32 tidak ditemukan. Flash firmware HavaPaw, nyalakan collar, dan pastikan Bluetooth + Lokasi aktif.",
+  "no_devices_found_hint": "Kalung tidak ditemukan. Pastikan kalung menyala (baterai terisi, atau ESP32 terhubung ke USB) dan Bluetooth serta Lokasi aktif. Kalung yang sudah dipasangkan hanya terlihat selama 5 menit setelah dinyalakan, jadi nyalakan ulang lalu pindai lagi.",
   "wifi_credentials_title": "Pengaturan WiFi Collar",
   "wifi_credentials_desc": "Collar memakai WiFi untuk mengirim data kesehatan ke HavaPaw. Masukkan jaringan 2.4 GHz.",
   "wifi_ssid": "Nama WiFi (SSID)",
