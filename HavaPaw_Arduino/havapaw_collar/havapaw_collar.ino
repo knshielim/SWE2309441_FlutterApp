@@ -315,10 +315,13 @@ void setup() {
 #endif
   Serial.begin(115200);
   delay(500);
+  Serial.printf("HavaPaw collar starting (brownout detector %s)\n",
+                DISABLE_BROWNOUT_DETECTOR ? "OFF" : "on");
   setCpuFrequencyMhz(80);
   loadSavedConfig();
 
   // Start Bluetooth before the sensors so their current does not add to the radio's start-up spike
+  Serial.println("Starting Bluetooth...");
   setupBle();
   delay(200);
   sensorsBegin();
