@@ -27,10 +27,13 @@ Firestore may ask for composite indexes the first time the geofence query runs
 2. In `havapaw_sensors.h` set `BATTERY_ADC_PIN` (for example 34) and `BATTERY_DIVIDER_RATIO`
    to match your voltage divider. Without this no battery level is sent and the low-battery
    push cannot fire.
-3. Wire the NEO-6M: GPS TX -> GPIO16, GPS RX -> GPIO17, 3.3 V, GND.
-4. Flash `HavaPaw_Arduino/havapaw_collar/havapaw_collar.ino`, then pair the collar in the app
+3. In Arduino IDE set **Tools → Partition Scheme → Huge APP (3MB No OTA/1MB SPIFFS)** (or
+   "No OTA (2MB APP/2MB SPIFFS)"). With Bluetooth, Wi-Fi and HTTPS the sketch is about 1.9 MB, more
+   than the default 1.2 MB app partition ("Sketch too big").
+4. Wire the NEO-6M: GPS TX -> GPIO16, GPS RX -> GPIO17, 3.3 V, GND.
+5. Flash `HavaPaw_Arduino/havapaw_collar/havapaw_collar.ino`, then pair the collar in the app
    (Collar connection screen). Pairing registers the secret token and writes it to the collar.
-5. To pair again, power-cycle the collar (BLE advertising stops 5 minutes after boot once paired).
+6. To pair again, power-cycle the collar (BLE advertising stops 5 minutes after boot once paired).
 
 ## 3. Test checklist
 

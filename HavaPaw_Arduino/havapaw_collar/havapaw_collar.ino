@@ -11,6 +11,14 @@
 #include <Preferences.h>
 #include "havapaw_sensors.h"
 
+// Bench testing only: 1 turns off the brownout reset when a weak USB port cannot
+// supply the radio's start-up current. Keep 0 on battery power.
+#define DISABLE_BROWNOUT_DETECTOR 0
+#if DISABLE_BROWNOUT_DETECTOR
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+#endif
+
 // Must match havapaw/lib/services/collar_ble_protocol.dart
 #define SERVICE_UUID        "7b1e0001-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
 #define CONFIG_CHAR_UUID    "7b1e0002-5f8a-4b2c-9e3d-1a2b3c4d5e6f"
@@ -111,6 +119,7 @@ String makeDeviceId() {
 bool connectWifi() {
   if (wifiSsid.isEmpty()) return false;
   WiFi.mode(WIFI_STA);
+  WiFi.setTxPower(WIFI_POWER_11dBm);  // lower transmit power to reduce current spikes
   WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
   Serial.printf("Connecting WiFi SSID=%s\n", wifiSsid.c_str());
   unsigned long start = millis();
@@ -257,6 +266,7 @@ class ServerCallbacks : public BLEServerCallbacks {
 void setupBle() {
   BLEDevice::init(deviceId.c_str());
   BLEDevice::setMTU(517);  // lets the app send the Wi-Fi settings in larger pieces
+  BLEDevice::setPower(ESP_PWR_LVL_N0);  // lower transmit power: less current, fine at room distances
   BLEServer *server = BLEDevice::createServer();
   server->setCallbacks(new ServerCallbacks());
 
@@ -300,13 +310,19 @@ void loadSavedConfig() {
 }
 
 void setup() {
+#if DISABLE_BROWNOUT_DETECTOR
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+#endif
   Serial.begin(115200);
   delay(500);
   setCpuFrequencyMhz(80);
+  loadSavedConfig();
+
+  // Start Bluetooth before the sensors so their current does not add to the radio's start-up spike
+  setupBle();
+  delay(200);
   sensorsBegin();
   gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-  loadSavedConfig();
-  setupBle();
   notifyStatus("READY");
 
   // Optional: enable NTP for proper timestamps after WiFi connects
