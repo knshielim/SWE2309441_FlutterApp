@@ -14,6 +14,10 @@
 // Bench testing only: 1 turns off the brownout reset when a weak USB port cannot
 // supply the radio's start-up current. Keep 0 on battery power.
 #define DISABLE_BROWNOUT_DETECTOR 0
+
+// 1 = USB mode: no Bluetooth or Wi-Fi. Readings are printed over the USB cable and
+// tools/usb_bridge.py sends them to the server. Use when the radio cannot be powered.
+#define USB_MODE 0
 #if DISABLE_BROWNOUT_DETECTOR
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
@@ -137,23 +141,8 @@ bool connectWifi() {
   return false;
 }
 
-bool postCollarReading() {
-  if (WiFi.status() != WL_CONNECTED) {
-    if (!connectWifi()) return false;
-  }
-  if (ingestUrl.isEmpty() || deviceToken.length() != 64) {
-    notifyStatus("ERROR:missing_config");
-    return false;
-  }
-
-  for (int i = 0; i < 20 && time(nullptr) < 100000; i++) {
-    delay(250);
-  }
-  if (time(nullptr) < 100000) {
-    notifyStatus("TIME_WAIT");
-    return false;
-  }
-
+// Builds one reading as JSON (same fields the server expects). False if the sensors are not ready.
+bool buildReading(String &body) {
   SensorSnapshot s = sensorsSnapshot();
   if (!s.hrValid || !s.tempValid) {
     String missing = String(s.hrValid ? "" : " heart_rate") + String(s.tempValid ? "" : " temperature");
@@ -188,8 +177,29 @@ bool postCollarReading() {
     doc["longitude"] = lastLng;
   }
 
-  String body;
   serializeJson(doc, body);
+  return true;
+}
+
+bool postCollarReading() {
+  if (WiFi.status() != WL_CONNECTED) {
+    if (!connectWifi()) return false;
+  }
+  if (ingestUrl.isEmpty() || deviceToken.length() != 64) {
+    notifyStatus("ERROR:missing_config");
+    return false;
+  }
+
+  for (int i = 0; i < 20 && time(nullptr) < 100000; i++) {
+    delay(250);
+  }
+  if (time(nullptr) < 100000) {
+    notifyStatus("TIME_WAIT");
+    return false;
+  }
+
+  String body;
+  if (!buildReading(body)) return false;
 
   WiFiClientSecure client;
   client.setCACert(GOOGLE_ROOT_CAS);
@@ -320,6 +330,15 @@ void setup() {
   setCpuFrequencyMhz(80);
   loadSavedConfig();
 
+#if USB_MODE
+  Serial.println("USB mode: no Bluetooth or Wi-Fi, readings go over the cable");
+  Serial.println("Device ID: " + deviceId);
+  sensorsBegin();
+  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  notifyStatus("READY");
+  return;
+#endif
+
   // Start Bluetooth before the sensors so their current does not add to the radio's start-up spike
   Serial.println("Starting Bluetooth...");
   setupBle();
@@ -348,6 +367,18 @@ void updateGps() {
 
 void loop() {
   updateGps();
+
+#if USB_MODE
+  // One reading every 30 s over the cable, read by tools/usb_bridge.py
+  if (millis() - lastPostMs > POST_INTERVAL_MS) {
+    lastPostMs = millis();
+    String body;
+    if (buildReading(body)) Serial.println("DATA " + body);
+    else Serial.println("Device ID: " + deviceId);
+  }
+  delay(20);
+  return;
+#endif
 
   // Once paired and online, stop advertising to save power (power-cycle to re-pair).
   if (!bleAdvertisingStopped && !deviceToken.isEmpty() && WiFi.status() == WL_CONNECTED &&
