@@ -336,21 +336,6 @@ class _CollarConnectionScreenState extends State<CollarConnectionScreen> {
 
       await PetService.updatePet(pet.id!, {'collarId': collarId});
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('collarData')
-          .add({
-        'deviceId': collarId,
-        'deviceName': device.name,
-        'petId': pet.id,
-        'timestamp': DateTime.now().toIso8601String(),
-        'batteryLevel': null,
-        'heartRate': null,
-        'temperature': null,
-        'steps': null,
-      });
-
       if (!mounted) return;
       setState(() {
         _isConnecting = false;

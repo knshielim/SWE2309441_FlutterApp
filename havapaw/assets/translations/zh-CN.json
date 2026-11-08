@@ -313,7 +313,7 @@
   "baseline_calibrating_progress": "基线校准中：第 {days} 天，共 {total} 天",
   "baseline_fully_personalized": "基线已完全针对该宠物个性化",
   "esp32_setup_hint": "请保持项圈开机并靠近手机。蓝牙配对后输入 WiFi，项圈即可向云端同步健康数据。",
-  "no_devices_found_hint": "未找到 ESP32 项圈。请刷入 HavaPaw 固件，打开项圈，并确认已开启蓝牙与定位。",
+  "no_devices_found_hint": "未找到项圈。请确认项圈已通电（电池已充电，或 ESP32 已连接 USB），并已打开蓝牙和定位。已配对的项圈只在开机后 5 分钟内可被发现，请重启项圈后再扫描。",
   "wifi_credentials_title": "项圈 WiFi 设置",
   "wifi_credentials_desc": "项圈通过 WiFi 向 HavaPaw 发送健康数据。请输入要连接的 2.4 GHz 网络。",
   "wifi_ssid": "WiFi 名称 (SSID)",
@@ -393,5 +393,7 @@
   "delete": "删除",
   "email": "电子邮件",
   "new_email": "新电子邮件",
-  "pet_on_walk_desc": "遛狗模式已开启，安全区域提醒已暂停。"
+  "pet_on_walk_desc": "遛狗模式已开启，安全区域提醒已暂停。",
+  "choose_zone_location": "点击地图（或使用当前位置）选择安全区域的中心。",
+  "error_saving_zone": "无法保存安全区域"
 }

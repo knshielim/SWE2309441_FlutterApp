@@ -30,7 +30,7 @@ Firestore may ask for composite indexes the first time the geofence query runs
 3. Wire the NEO-6M: GPS TX -> GPIO16, GPS RX -> GPIO17, 3.3 V, GND.
 4. Flash `HavaPaw_Arduino/havapaw_collar/havapaw_collar.ino`, then pair the collar in the app
    (Collar connection screen). Pairing registers the secret token and writes it to the collar.
-5. To pair again, power-cycle the collar (BLE advertising stops 2 minutes after boot once paired).
+5. To pair again, power-cycle the collar (BLE advertising stops 5 minutes after boot once paired).
 
 ## 3. Test checklist
 

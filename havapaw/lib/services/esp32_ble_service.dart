@@ -328,8 +328,8 @@ class Esp32BleService {
       }
 
       final jsonBytes = utf8.encode(effectivePayload.toJsonString());
-      // Chunk writes for BLE MTU limits (~180 bytes safe).
-      const chunk = 160;
+      // Each write must fit the negotiated MTU (MTU - 3 bytes of data)
+      final chunk = (device.mtuNow - 3).clamp(20, 160);
       for (var i = 0; i < jsonBytes.length; i += chunk) {
         final end =
             (i + chunk < jsonBytes.length) ? i + chunk : jsonBytes.length;

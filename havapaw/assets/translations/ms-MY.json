@@ -313,7 +313,7 @@
   "baseline_calibrating_progress": "Kalibrasi asas: hari {days} daripada {total}",
   "baseline_fully_personalized": "Asas telah diperibadikan sepenuhnya untuk haiwan ini",
   "esp32_setup_hint": "Pastikan kolar dihidupkan dan berhampiran. Selepas pasangan BLE, masukkan WiFi supaya data kesihatan disegerakkan ke awan.",
-  "no_devices_found_hint": "Kolar ESP32 tidak dijumpai. Flash firmware HavaPaw, hidupkan kolar, dan pastikan Bluetooth + Lokasi diaktifkan.",
+  "no_devices_found_hint": "Kolar tidak ditemui. Pastikan kolar dihidupkan (bateri dicas, atau ESP32 disambung ke USB) dan Bluetooth serta Lokasi dihidupkan. Kolar yang sudah dipasangkan hanya kelihatan selama 5 minit selepas dihidupkan, jadi mulakan semula dan imbas lagi.",
   "wifi_credentials_title": "Tetapan WiFi Kolar",
   "wifi_credentials_desc": "Kolar menggunakan WiFi untuk menghantar data kesihatan ke HavaPaw. Masukkan rangkaian 2.4 GHz.",
   "wifi_ssid": "Nama WiFi (SSID)",
@@ -393,5 +393,7 @@
   "delete": "Padam",
   "email": "E-mel",
   "new_email": "E-mel baharu",
-  "pet_on_walk_desc": "Mod berjalan aktif, jadi amaran zon selamat dijeda."
+  "pet_on_walk_desc": "Mod berjalan aktif, jadi amaran zon selamat dijeda.",
+  "choose_zone_location": "Ketik peta (atau gunakan lokasi semasa anda) untuk memilih pusat zon selamat.",
+  "error_saving_zone": "Tidak dapat menyimpan zon selamat"
 }

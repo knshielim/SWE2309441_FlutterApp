@@ -75,7 +75,7 @@ double lastLat = 0, lastLng = 0;
 uint32_t lastFixMs = 0;
 bool haveFix = false;
 
-const unsigned long BLE_ADVERTISE_WINDOW_MS = 120000;
+const unsigned long BLE_ADVERTISE_WINDOW_MS = 300000;  // 5 minutes after boot
 bool bleAdvertisingStopped = false;
 
 Preferences prefs;
@@ -256,6 +256,7 @@ class ServerCallbacks : public BLEServerCallbacks {
 
 void setupBle() {
   BLEDevice::init(deviceId.c_str());
+  BLEDevice::setMTU(517);  // lets the app send the Wi-Fi settings in larger pieces
   BLEServer *server = BLEDevice::createServer();
   server->setCallbacks(new ServerCallbacks());
 
