@@ -106,8 +106,56 @@ test("daily summary: local day in Malaysia time, steps and resting heart rate", 
   assert.strictEqual(r.localDayKey(Date.parse("2026-10-20T15:59:00Z")), "2026-10-20");
   assert.deepStrictEqual(r.dailySummaryIncrements({ heartRate: 80, steps: 20 }),
     { stepsSum: 20, stepsN: 1, restHrSum: 80, restHrN: 1 });
-  assert.deepStrictEqual(r.dailySummaryIncrements({ heartRate: 120, steps: 400 }), { stepsSum: 400, stepsN: 1 });
+  assert.deepStrictEqual(r.dailySummaryIncrements({ heartRate: 120, steps: 400 }), { stepsSum: 400, stepsN: 1, activeN: 1 });
   // missing steps count as resting for the heart-rate baseline (same as the app)
   assert.deepStrictEqual(r.dailySummaryIncrements({ heartRate: 75 }), { restHrSum: 75, restHrN: 1 });
   assert.strictEqual(r.dailySummaryIncrements({ temperature: 38.5 }), null);
+});
+
+test("collar off the pet: only counted, never used for activity or baseline", () => {
+  assert.strictEqual(r.isOffBody({ temperature: 27.5 }), true);
+  assert.strictEqual(r.isOffBody({ temperature: 38.4 }), false);
+  assert.strictEqual(r.isOffBody({ heartRate: 80 }), false);
+  assert.deepStrictEqual(r.dailySummaryIncrements({ temperature: 28, heartRate: 90, steps: 0 }), { offBodyN: 1 });
+});
+
+test("activity goal by species, size and age", () => {
+  const now = new Date("2026-11-11T00:00:00Z");
+  assert.strictEqual(r.activityGoalMinutes({ type: "cat", birthday: "2020-01-01" }, now), 20);
+  assert.strictEqual(r.activityGoalMinutes({ type: "dog", weight: 8, birthday: "2022-01-01" }, now), 40);
+  assert.strictEqual(r.activityGoalMinutes({ type: "dog", weight: 25, birthday: "2022-01-01" }, now), 60);
+  assert.strictEqual(r.activityGoalMinutes({ type: "dog", weight: 60, birthday: "2022-01-01" }, now), 45);
+  assert.strictEqual(r.activityGoalMinutes({ type: "dog", weight: 25, birthday: "2026-06-01" }, now), 30);
+  assert.strictEqual(r.activityGoalMinutes({ type: "dog", weight: 25, birthday: "2015-01-01" }, now), 30);
+  assert.strictEqual(r.activeMinutes({ activeN: 121 }), 61);
+});
+
+test("daily digest message", () => {
+  const pet = { name: "Bobby", type: "dog", weight: 25, birthday: "2022-01-01" };
+  const now = new Date("2026-11-11T12:00:00Z");
+  assert.strictEqual(r.digestMessage(pet, { stepsN: 0 }, [], 0, now), null);
+  const calm = r.digestMessage(pet, { stepsN: 400, activeN: 130, restHrSum: 7200, restHrN: 100 },
+    [{ restHrSum: 7000, restHrN: 100 }], 0, now);
+  assert.strictEqual(calm.title, "Bobby's day");
+  assert.match(calm.body, /65 of 60 active minutes \(goal reached\)/);
+  assert.match(calm.body, /resting heart rate 72 bpm, normal for Bobby/);
+  assert.match(calm.body, /no alerts/);
+  const busy = r.digestMessage(pet, { stepsN: 400, activeN: 20, restHrSum: 9000, restHrN: 100 },
+    [{ restHrSum: 7000, restHrN: 100 }], 2, now);
+  assert.match(busy.body, /10 of 60 active minutes, resting heart rate 90 bpm, higher than usual, 2 alerts\.$/);
+});
+
+test("Virtual Vet context: weekly summary and journal, clipped", () => {
+  assert.strictEqual(r.formatOwnerContext(null), "");
+  const text = r.formatOwnerContext({
+    weekly: { restingHr: 72.4, restingHrChange: 3.2, activityChangePct: -18.6, alerts: 1 },
+    journal: [
+      { date: "2026-11-10", kind: "note", tag: "vomited", text: "after\nlunch " + "x".repeat(400) },
+      ...Array.from({ length: 15 }, () => ({ date: "2026-11-09", kind: "checkin", tag: "playing" })),
+    ],
+  });
+  assert.match(text, /resting heart rate 72 bpm, \+3 bpm vs last week, activity -19% vs last week, 1 alert/);
+  assert.match(text, /2026-11-10 note: vomited - "after lunch x+"/);
+  assert.ok(!text.includes("x".repeat(250)));
+  assert.strictEqual((text.match(/^- /gm) || []).length, 10);
 });

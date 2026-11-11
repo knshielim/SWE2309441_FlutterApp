@@ -19,6 +19,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   bool _medicationReminders = true;
   bool _geofenceAlerts = true;
   bool _lowBatteryAlerts = true;
+  bool _dailyDigest = true;
 
   @override
   void initState() {
@@ -35,6 +36,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       _medicationReminders = prefs.getBool('medication_reminders') ?? true;
       _geofenceAlerts = prefs.getBool('geofence_alerts') ?? true;
       _lowBatteryAlerts = prefs.getBool('low_battery_alerts') ?? true;
+      _dailyDigest = prefs.getBool('daily_digest') ?? true;
     });
   }
 
@@ -47,6 +49,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       'health_alerts': 'health',
       'geofence_alerts': 'geofence',
       'low_battery_alerts': 'battery',
+      'daily_digest': 'digest',
     };
     final cloudKey = cloudKeys[key];
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -141,6 +144,16 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
             onChanged: (v) {
               setState(() => _lowBatteryAlerts = v);
               _saveSetting('low_battery_alerts', v);
+            },
+          ),
+          _NotificationToggle(
+            icon: Icons.nightlight_round,
+            title: 'daily_digest'.tr(),
+            subtitle: 'daily_digest_desc'.tr(),
+            value: _dailyDigest,
+            onChanged: (v) {
+              setState(() => _dailyDigest = v);
+              _saveSetting('daily_digest', v);
             },
           ),
           const SizedBox(height: 24),
