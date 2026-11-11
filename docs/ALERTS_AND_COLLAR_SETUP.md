@@ -116,3 +116,21 @@ python tools/virtual_collar.py dataset --species cat --weight 4.5 --out cat.csv
 It prints how the Random Forest classifies each scenario. The file can be used with
 `python havapaw_ml/train_random_forest.py --real-csv <file>` to demo the real-data path, but it is
 simulated data, so do not report it as a real-pet result.
+
+## USB mode (collar without Bluetooth/Wi-Fi)
+
+Use this if the collar resets ("Brownout detector was triggered") whenever the radio starts.
+The collar still reads all its sensors, but sends each reading over the USB cable, and
+`tools/usb_bridge.py` on the laptop posts it to `ingestCollarData` with a device token,
+exactly like the collar would over Wi-Fi. Alerts, ML and the app work the same way.
+
+1. In `havapaw_collar.ino` set `#define USB_MODE 1` and upload.
+2. Open the Serial Monitor (115200) and note the line `Device ID: HavaPaw-ESP32-XXXX`. Close the Serial Monitor.
+3. `pip install pyserial firebase-admin`
+4. Pair it once with your pet (the key file stays outside the repo):
+   `python tools/usb_bridge.py setup --key C:\keys\havapaw-key.json --email you@example.com --pet Bobby --device-id HavaPaw-ESP32-XXXX`
+5. Start the bridge: `python tools/usb_bridge.py run --port COM5`
+   (`--dry-run` prints the readings without sending them).
+
+A reading is sent every 30 s once heart rate and temperature are valid (finger or the pet on the sensor).
+GPS location is only included if the GPS module has a fix. Set `USB_MODE 0` again to go back to Bluetooth/Wi-Fi.

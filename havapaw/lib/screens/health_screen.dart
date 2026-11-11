@@ -18,6 +18,10 @@ import 'settings_screen.dart';
 import 'health_trends_screen.dart';
 import 'alert_history_screen.dart';
 import '../widgets/collar_status_bar.dart';
+import '../widgets/spike_check_in_card.dart';
+import '../models/spike_check.dart';
+import '../services/baseline_calibration_service.dart';
+import 'health_journal_screen.dart';
 import 'ai_insights_screen.dart';
 import 'collar_connection_screen.dart';
 
@@ -265,9 +269,17 @@ class _HealthContent extends StatelessWidget {
                   summaries: summarySnapshot.data ?? const [],
                 );
 
+                // Ask the owner for context when the latest reading spikes
+                final baseline = BaselineCalibrationService.calibrateFromSummaries(
+                    pet, summarySnapshot.data ?? const []);
+                final spike = SpikeCheck.reasonFor(collarData, pet,
+                    hrBaseline: baseline.usedFallback ? null : baseline.hrBaseline);
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (spike != null)
+                      SpikeCheckInCard(reading: collarData, petId: petId, petName: pet.name, reason: spike),
                     Row(
                       children: [
                         Expanded(
@@ -345,6 +357,27 @@ class _HealthContent extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
+
+            // Health journal button
+            if (petId.isNotEmpty)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => HealthJournalScreen(petId: petId, petName: pet.name)),
+                  ),
+                  icon: const Icon(Icons.menu_book_rounded, size: 20),
+                  label: Text('health_journal'.tr()),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primaryTeal,
+                    side: const BorderSide(color: AppColors.primaryTeal),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),

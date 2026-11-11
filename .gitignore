@@ -14,3 +14,9 @@ node_modules/
 
 # Virtual collar token (tools/virtual_collar.py setup)
 tools/virtual_collar.json
+
+# USB bridge token (tools/usb_bridge.py setup)
+tools/usb_bridge.json
+
+# Python cache
+__pycache__/

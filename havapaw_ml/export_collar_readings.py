@@ -21,6 +21,9 @@ RESTING_STEPS_CUTOFF = 150        # BaselineCalibrationService._restingStepsCuto
 DEFAULT_SPO2 = 97.5               # MLHealthClassifierService.buildFeatureVector
 ACTIVITY_RATIO_CLIP = 5.0
 
+# owner check-in answers from the app (JournalEntry.mlLabelFor) that imply a class
+CHECKIN_LABELS = {"playing": "active", "stressed": "stressed"}
+
 
 # pet profile (HealthIntelligenceService)
 def pet_age(birthday, at):
@@ -134,7 +137,8 @@ def build_rows(pet, readings, tz):
             "species_encoded": 1.0 if str(pet.get("type", "")).lower() == "dog" else 0.0,
             "spo2_measured": spo2 is not None,
             "accel_measured": accel_measured,
-            "label": "",
+            "owner_context": r.get("ownerContext", ""),
+            "label": CHECKIN_LABELS.get(r.get("ownerContext", ""), ""),
             "notes": "",
         })
     return rows
