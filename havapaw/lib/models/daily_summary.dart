@@ -1,4 +1,5 @@
 import 'collar_data.dart';
+import 'collar_wear.dart';
 
 class DailySummary {
   static const int restingStepsCutoff = 150;
@@ -8,6 +9,11 @@ class DailySummary {
   final int stepsN;
   final double restHrSum;
   final int restHrN;
+  final int activeN; // readings with more than restingStepsCutoff steps
+  final int offBodyN; // readings taken while the collar was off the pet
+
+  // The collar uploads every 30 s
+  static const double minutesPerReading = 0.5;
 
   const DailySummary({
     required this.date,
@@ -15,7 +21,11 @@ class DailySummary {
     this.stepsN = 0,
     this.restHrSum = 0,
     this.restHrN = 0,
+    this.activeN = 0,
+    this.offBodyN = 0,
   });
+
+  int get activeMinutes => (activeN * minutesPerReading).round();
 
   // Average steps per reading (the collar counts steps over its last 5 minutes).
   double? get avgStepsPerReading => stepsN > 0 ? stepsSum / stepsN : null;
@@ -29,6 +39,8 @@ class DailySummary {
       stepsN: (map['stepsN'] as num?)?.toInt() ?? 0,
       restHrSum: (map['restHrSum'] as num?)?.toDouble() ?? 0,
       restHrN: (map['restHrN'] as num?)?.toInt() ?? 0,
+      activeN: (map['activeN'] as num?)?.toInt() ?? 0,
+      offBodyN: (map['offBodyN'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -43,6 +55,7 @@ class DailySummary {
     final restHr = <String, List<double>>{};
     for (final r in readings) {
       if (r.id != null && !seen.add(r.id!)) continue;
+      if (CollarWear.isOffBody(r)) continue;
       final day = dayKey(r.timestamp);
       if (r.steps != null) steps.putIfAbsent(day, () => []).add(r.steps!);
       final hr = r.heartRate;
@@ -59,6 +72,7 @@ class DailySummary {
           stepsN: steps[day]?.length ?? 0,
           restHrSum: (restHr[day] ?? const []).fold(0.0, (a, b) => a + b),
           restHrN: restHr[day]?.length ?? 0,
+          activeN: (steps[day] ?? const []).where((v) => v > restingStepsCutoff).length,
         ),
     ];
   }

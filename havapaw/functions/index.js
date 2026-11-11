@@ -20,6 +20,8 @@ Rules:
 - Reference the pet by name and be specific about which reading(s) triggered
   the note (e.g. "your heart rate reading was..."), not generic filler.
 - Always end with a brief reminder that this is guidance, not a diagnosis.
+- If recent history (weekly summary, owner's journal) is given, use it when it is
+  relevant (e.g. a recent food change, vomiting or a vet visit), and mention it.
 - If the owner asks a specific free-text question, answer THAT question
   directly first, still grounded in the sensor data and classification
   provided, before adding any extra notes.`;
@@ -29,7 +31,7 @@ exports.generateVirtualVetAdvice = onCall(
   { secrets: [OPENAI_API_KEY], cors: true, maxInstances: 10 },
   async (request) => {
     const data = request.data || {};
-    const { petName, species, breed, age, weight, reading, classification, question } = data;
+    const { petName, species, breed, age, weight, reading, classification, question, context } = data;
 
     if (!petName || !reading || !classification) {
       throw new HttpsError(
@@ -39,6 +41,7 @@ exports.generateVirtualVetAdvice = onCall(
     }
 
     const trimmedQuestion = typeof question === "string" ? question.trim() : "";
+    const contextText = rules.formatOwnerContext(context);
 
     const userPrompt = `Pet profile:
 - Name: ${petName}
@@ -57,7 +60,7 @@ Latest sensor reading:
 ML classification:
 - Predicted state: ${classification.state}
 - Confidence: ${classification.confidence ?? "n/a"}
-
+${contextText}
 ${trimmedQuestion
   ? `The owner asked: "${trimmedQuestion}"\n\nAnswer their question first, grounded in the data above.`
   : "Write the Virtual Vet note for the owner now."}`;
@@ -229,7 +232,7 @@ Temperature: ${reading.temperature ?? "n/a"} degC. SpO2: ${reading.bloodOxygen ?
 }
 
 // Push notification
-async function sendPush(uid, petId, alert) {
+async function sendPush(uid, petId, alert, { record: saveRecord = true } = {}) {
   const tokensSnap = await db.collection("users").doc(uid).collection("fcmTokens").get();
   const tokens = tokensSnap.docs.map((d) => d.id);
   const record = {
@@ -245,7 +248,7 @@ async function sendPush(uid, petId, alert) {
     record.baselineHr = alert.baselineHr;
     record.generatedBy = alert.generatedBy || "fallback";
   }
-  await db.collection("users").doc(uid).collection("alerts").add(record);
+  if (saveRecord) await db.collection("users").doc(uid).collection("alerts").add(record);
   if (tokens.length === 0) return;
   const result = await admin.messaging().sendEachForMulticast({
     tokens,
@@ -308,6 +311,8 @@ exports.onCollarReading = onDocumentCreated(
     }
 
     const pet = petDoc.data();
+    // Collar off the pet (probe at room temperature): no health alerts or baseline updates
+    const offBody = rules.isOffBody(reading);
     const prefs = (userDoc.exists && userDoc.get("alertPrefs")) || {};
     if (prefs.push === false) return;
     const onWalk = userDoc.exists && userDoc.get("onWalk") === true;
@@ -322,8 +327,10 @@ exports.onCollarReading = onDocumentCreated(
     const toSend = [];
 
     // health (one alert per reading, only after consecutive abnormal readings)
-    const hasVitals = typeof reading.heartRate === "number" || typeof reading.temperature === "number";
-    if (hasVitals) {
+    const hasVitals = !offBody && (typeof reading.heartRate === "number" || typeof reading.temperature === "number");
+    if (offBody) {
+      for (const t of ["highHeartRate", "stressWarning", "highTemperature"]) counts[t] = 0;
+    } else if (hasVitals) {
       const top = rules.topHealthAlert(reading, pet);
       for (const t of ["highHeartRate", "stressWarning", "highTemperature"]) {
         counts[t] = top && top.type === t ? (counts[t] || 0) + 1 : 0;
@@ -341,7 +348,7 @@ exports.onCollarReading = onDocumentCreated(
 
     const today = rules.dayKey(now);
     const daily = state.daily || {};
-    const dev = rules.deviationCheck(reading, daily, today);
+    const dev = offBody ? null : rules.deviationCheck(reading, daily, today);
     counts.deviation = dev ? (counts.deviation || 0) + 1 : 0;
     if (
       dev &&
@@ -353,7 +360,7 @@ exports.onCollarReading = onDocumentCreated(
       lastSent.deviation = now;
       toSend.push(await deviationAlert(pet, reading, dev));
     }
-    const newDaily = rules.addToDailyStats(daily, reading, today);
+    const newDaily = offBody ? daily : rules.addToDailyStats(daily, reading, today);
 
     // low battery (once per discharge cycle)
     if (typeof reading.batteryLevel === "number") {
@@ -405,6 +412,45 @@ exports.onCollarReading = onDocumentCreated(
         await sendPush(uid, petId, alert);
       } catch (e) {
         logger.error("sendPush failed", e);
+      }
+    }
+  }
+);
+
+// Evening summary push, 8 pm Malaysia time
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+
+exports.dailyDigest = onSchedule(
+  { schedule: "0 20 * * *", timeZone: "Asia/Kuala_Lumpur", maxInstances: 1 },
+  async () => {
+    const now = Date.now();
+    const today = rules.localDayKey(now);
+    const prevKeys = [1, 2, 3].map((d) => rules.localDayKey(now - d * 86400000));
+    const startOfDay = new Date(`${today}T00:00:00+08:00`);
+    const users = await db.collection("users").get();
+    for (const userDoc of users.docs) {
+      const prefs = userDoc.get("alertPrefs") || {};
+      if (prefs.push === false || prefs.digest === false) continue;
+      try {
+        const userRef = userDoc.ref;
+        const [pets, alerts] = await Promise.all([
+          userRef.collection("pets").get(),
+          userRef.collection("alerts").where("createdAt", ">=", startOfDay).get(),
+        ]);
+        for (const petDoc of pets.docs) {
+          const statsRef = petDoc.ref.collection("dailyStats");
+          const [todayDoc, ...prevDocs] = await Promise.all(
+            [today, ...prevKeys].map((k) => statsRef.doc(k).get())
+          );
+          if (!todayDoc.exists) continue;
+          const alertsToday = alerts.docs.filter((a) => a.get("petId") === petDoc.id).length;
+          const msg = rules.digestMessage(
+            petDoc.data(), todayDoc.data(), prevDocs.filter((d) => d.exists).map((d) => d.data()), alertsToday
+          );
+          if (msg) await sendPush(userDoc.id, petDoc.id, { ...msg, severity: 0.1 }, { record: false });
+        }
+      } catch (e) {
+        logger.error(`daily digest failed for ${userDoc.id}`, e);
       }
     }
   }

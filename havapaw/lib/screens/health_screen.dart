@@ -22,6 +22,9 @@ import '../widgets/spike_check_in_card.dart';
 import '../models/spike_check.dart';
 import '../services/baseline_calibration_service.dart';
 import 'health_journal_screen.dart';
+import '../widgets/health_insight_cards.dart';
+import '../models/collar_wear.dart';
+import '../services/vet_report_service.dart';
 import 'ai_insights_screen.dart';
 import 'collar_connection_screen.dart';
 
@@ -258,11 +261,16 @@ class _HealthContent extends StatelessWidget {
             _OverallHealthCard(collarData: collarData, healthStatus: healthStatus),
             const SizedBox(height: 16),
 
+            // Collar off the pet: readings are room air, so no alerts or check-ins
+            if (CollarWear.isOffBody(collarData))
+              OffBodyBanner(petName: pet.name, temperature: collarData.temperature!),
+
             // Health alerts section (history comes from the server's daily summaries)
             StreamBuilder<List<DailySummary>>(
               stream: DailySummaryService.streamForPet(petId, days: 7),
               builder: (context, summarySnapshot) {
-                final alerts = HealthIntelligenceService.generateHealthAlerts(
+                final offBody = CollarWear.isOffBody(collarData);
+                final alerts = offBody ? <HealthAlert>[] : HealthIntelligenceService.generateHealthAlerts(
                   collarData,
                   pet,
                   const [],
@@ -272,7 +280,7 @@ class _HealthContent extends StatelessWidget {
                 // Ask the owner for context when the latest reading spikes
                 final baseline = BaselineCalibrationService.calibrateFromSummaries(
                     pet, summarySnapshot.data ?? const []);
-                final spike = SpikeCheck.reasonFor(collarData, pet,
+                final spike = offBody ? null : SpikeCheck.reasonFor(collarData, pet,
                     hrBaseline: baseline.usedFallback ? null : baseline.hrBaseline);
 
                 return Column(
@@ -298,10 +306,15 @@ class _HealthContent extends StatelessWidget {
                     const SizedBox(height: 6),
                     ...alerts.map((alert) => _HealthAlertCard(alert: alert)),
                     const SizedBox(height: 16),
+                    if (!offBody)
+                      WhyStatusCard(reading: collarData, pet: pet, summaries: summarySnapshot.data ?? const []),
                   ],
                 );
               },
             ),
+
+            ActivityGoalCard(pet: pet),
+            HeatRiskCard(pet: pet, latitude: collarData.latitude, longitude: collarData.longitude),
 
             // Vital signs
             Text('vital_signs'.tr(), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.slateDark)),
@@ -381,6 +394,10 @@ class _HealthContent extends StatelessWidget {
                   ),
                 ),
               ),
+            const SizedBox(height: 12),
+
+            // Vet report button
+            if (petId.isNotEmpty) _VetReportButton(pet: pet),
             const SizedBox(height: 12),
 
             // AI insights button
@@ -1407,6 +1424,52 @@ class _ConnectCollarPrompt extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _VetReportButton extends StatefulWidget {
+  final Pet pet;
+
+  const _VetReportButton({required this.pet});
+
+  @override
+  State<_VetReportButton> createState() => _VetReportButtonState();
+}
+
+class _VetReportButtonState extends State<_VetReportButton> {
+  bool _busy = false;
+
+  Future<void> _share() async {
+    setState(() => _busy = true);
+    try {
+      await VetReportService.share(widget.pet);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('vet_report_failed'.tr())));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _busy ? null : _share,
+        icon: _busy
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.picture_as_pdf_rounded, size: 20),
+        label: Text('vet_report'.tr()),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primaryTeal,
+          side: const BorderSide(color: AppColors.primaryTeal),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
       ),
     );
   }

@@ -134,3 +134,17 @@ exactly like the collar would over Wi-Fi. Alerts, ML and the app work the same w
 
 A reading is sent every 30 s once heart rate and temperature are valid (finger or the pet on the sensor).
 GPS location is only included if the GPS module has a fix. Set `USB_MODE 0` again to go back to Bluetooth/Wi-Fi.
+
+## Daily summary, collar-off detection and Virtual Vet history
+
+Deploy the functions again after pulling (`firebase deploy --only functions`).
+
+- **dailyDigest** runs every day at 8 pm Malaysia time and sends each owner one push per pet,
+  e.g. "Bobby's day: 45 of 60 active minutes, resting heart rate 72 bpm, normal for Bobby, no alerts."
+  It is not saved to the alert history. Owners can turn it off in Notification settings ("Daily summary").
+  The first deploy asks to enable the Cloud Scheduler API; answer yes.
+- **Collar off the pet:** a reading below 32 °C is treated as room air. It raises no health alerts and is
+  left out of the activity and heart-rate baselines (counted as `offBodyN` in the daily summary).
+- **Active minutes:** readings with more than 150 steps count as active (`activeN`); each reading is 30 s.
+  Days before this update have no `activeN`, so their active minutes show as 0.
+- **Virtual Vet** now also receives the last 7 days' summary and journal entries from the app.
