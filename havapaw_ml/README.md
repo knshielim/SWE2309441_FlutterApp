@@ -27,6 +27,10 @@ python export_collar_readings.py --key <service-account.json> --email <your logi
 python train_random_forest.py --real-csv data/real_readings.csv
 python train_random_forest.py --real-csv data/real_readings.csv --mix-real
 ```
+Readings the owner answered a spike check-in for in the app are labelled automatically
+("Playing / running" → active, "Scared / stressed" → stressed; the answer is kept in `owner_context`).
+`--labels` ranges override these.
+
 `--mix-real` needs labelled readings from at least 2 pets. It tests each pet with a model trained on
 synthetic data only and with one trained on synthetic data plus the other real pets, and adds both
 results to the report. `--real-weight` (default 10) sets how much each real reading counts.
