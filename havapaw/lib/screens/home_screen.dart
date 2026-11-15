@@ -559,6 +559,18 @@ class _HomeTabState extends State<_HomeTab> {
                                           style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
                                       const SizedBox(height: 6),
                                       Text(pet.collarId, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                                      const SizedBox(height: 12),
+                                      OutlinedButton.icon(
+                                        onPressed: () => Navigator.push(
+                                            context, MaterialPageRoute(builder: (_) => const CollarConnectionScreen())),
+                                        icon: const Icon(Icons.bluetooth_rounded, size: 18),
+                                        label: Text('reconnect_collar'.tr()),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppColors.primaryTeal,
+                                          side: const BorderSide(color: AppColors.primaryTeal),
+                                          minimumSize: const Size(double.infinity, 40),
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),

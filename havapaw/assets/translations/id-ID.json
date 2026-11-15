@@ -472,5 +472,6 @@
   "vet_report": "Laporan dokter hewan (PDF)",
   "vet_report_failed": "Laporan gagal dibuat. Periksa koneksi Anda dan coba lagi.",
   "daily_digest": "Ringkasan harian",
-  "daily_digest_desc": "Ringkasan singkat hari hewan Anda pukul 8 malam"
+  "daily_digest_desc": "Ringkasan singkat hari hewan Anda pukul 8 malam",
+  "reconnect_collar": "Pasangkan kalung lagi"
 }

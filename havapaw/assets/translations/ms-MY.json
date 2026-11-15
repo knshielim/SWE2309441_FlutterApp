@@ -472,5 +472,6 @@
   "vet_report": "Laporan doktor haiwan (PDF)",
   "vet_report_failed": "Laporan tidak dapat dibuat. Semak sambungan anda dan cuba lagi.",
   "daily_digest": "Ringkasan harian",
-  "daily_digest_desc": "Ringkasan ringkas hari haiwan anda pada 8 malam"
+  "daily_digest_desc": "Ringkasan ringkas hari haiwan anda pada 8 malam",
+  "reconnect_collar": "Pasangkan kolar semula"
 }

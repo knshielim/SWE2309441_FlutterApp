@@ -461,5 +461,6 @@
   "vet_report": "Vet report (PDF)",
   "vet_report_failed": "Could not create the report. Check your connection and try again.",
   "daily_digest": "Daily summary",
-  "daily_digest_desc": "A short summary of your pet's day at 8 pm"
+  "daily_digest_desc": "A short summary of your pet's day at 8 pm",
+  "reconnect_collar": "Pair collar again"
 }
