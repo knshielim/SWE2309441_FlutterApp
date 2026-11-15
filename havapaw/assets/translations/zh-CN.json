@@ -473,5 +473,6 @@
   "vet_report_failed": "无法生成报告，请检查网络后重试。",
   "daily_digest": "每日摘要",
   "daily_digest_desc": "每晚 8 点推送宠物当天的简短摘要",
-  "reconnect_collar": "重新配对项圈"
+  "reconnect_collar": "重新配对项圈",
+  "last_5_min": "最近 5 分钟"
 }

@@ -117,6 +117,11 @@ test("collar off the pet: only counted, never used for activity or baseline", ()
   assert.strictEqual(r.isOffBody({ temperature: 38.4 }), false);
   assert.strictEqual(r.isOffBody({ heartRate: 80 }), false);
   assert.deepStrictEqual(r.dailySummaryIncrements({ temperature: 28, heartRate: 90, steps: 0 }), { offBodyN: 1 });
+  // a cool probe but the heart-rate sensor touches skin: still worn
+  assert.strictEqual(r.isOffBody({ temperature: 29.3, skinContact: true }), false);
+  assert.strictEqual(r.isOffBody({ temperature: 29.3, skinContact: false }), true);
+  assert.strictEqual(r.sanitizeReading({ heartRate: 80, skinContact: true }).value.skinContact, true);
+  assert.strictEqual(r.sanitizeReading({ heartRate: 80, skinContact: "yes" }).value.skinContact, undefined);
 });
 
 test("activity goal by species, size and age", () => {

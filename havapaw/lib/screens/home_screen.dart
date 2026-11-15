@@ -528,15 +528,15 @@ class _HomeTabState extends State<_HomeTab> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('activity_breakdown'.tr(), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark)),
+                                    Text('latest_reading'.tr(), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.slateDark)),
                                     const SizedBox(height: 12),
                                     Row(
                                       children: [
-                                        _StatCard(icon: Icons.directions_walk_rounded, label: 'steps'.tr(), value: collarData?.steps?.toString() ?? '--', unit: '/ 10,000', color: AppColors.primaryTeal),
+                                        _StatCard(icon: Icons.favorite_rounded, label: 'heart_rate'.tr(), value: collarData.heartRate?.toString() ?? '--', unit: 'bpm'.tr(), color: AppColors.alertRed),
                                         const SizedBox(width: 12),
-                                        _StatCard(icon: Icons.straighten_rounded, label: 'distance'.tr(), value: collarData?.distance?.toStringAsFixed(1) ?? '--', unit: 'km today', color: AppColors.darkTeal),
+                                        _StatCard(icon: Icons.thermostat_rounded, label: 'temperature'.tr(), value: collarData.temperature?.toStringAsFixed(1) ?? '--', unit: '°C', color: AppColors.amber),
                                         const SizedBox(width: 12),
-                                        _StatCard(icon: Icons.local_fire_department_rounded, label: 'calories'.tr(), value: collarData?.calories?.toString() ?? '--', unit: 'kcal', color: AppColors.amber),
+                                        _StatCard(icon: Icons.directions_walk_rounded, label: 'steps'.tr(), value: collarData.steps?.toString() ?? '--', unit: 'last_5_min'.tr(), color: AppColors.primaryTeal),
                                       ],
                                     ),
                                   ],

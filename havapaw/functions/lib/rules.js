@@ -162,8 +162,9 @@ function localDayKey(ms) {
 // Below this the temperature probe is reading room air, so the collar is off the pet
 const OFF_BODY_TEMP_C = 32;
 
+// Cold probe and no skin contact on the heart-rate sensor (older readings have no skinContact)
 function isOffBody(reading) {
-  return isNum(reading.temperature) && reading.temperature < OFF_BODY_TEMP_C;
+  return isNum(reading.temperature) && reading.temperature < OFF_BODY_TEMP_C && reading.skinContact !== true;
 }
 
 function dailySummaryIncrements(reading) {
@@ -253,6 +254,7 @@ function sanitizeReading(body) {
     };
     const value = {};
     for (const [k, v] of Object.entries(clean)) if (v !== undefined) value[k] = v;
+    if (typeof body.skinContact === "boolean") value.skinContact = body.skinContact;
     if (Object.keys(value).length === 0) return { ok: false, error: "empty_reading" };
     return { ok: true, value };
   } catch (e) {

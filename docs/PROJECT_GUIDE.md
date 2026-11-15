@@ -276,7 +276,8 @@ Kept separate from `index.js` so they can be unit tested without Firebase.
 - `deviationCheck()`: compares heart rate with the pet's mean for the same state (rest/active) over the
   previous 3 days (needs about 30 minutes of data); alerts at **±35 %**.
 - `dailySummaryIncrements()`: what each reading adds to `dailyStats`.
-- `isOffBody()`: temperature below **32 °C** means the probe is reading room air (collar not worn); such
+- `isOffBody()`: temperature below **32 °C** and no skin contact (`skinContact` not true) means the collar
+  is not worn; such
   readings raise no health alerts and are left out of the baselines.
 - `activityGoalMinutes()`, `activeMinutes()`, `digestMessage()`: the activity goal and the evening
   summary text.
@@ -357,7 +358,7 @@ asks for terms and data consent once, then `HomeScreen`).
 | `alert_explanation` | The factors shown in "Why this status?" |
 | `activity_goal` | Daily active-minutes goal and streak |
 | `heat_risk` | Walk safety level from the "feels like" temperature |
-| `collar_wear` | Collar-off detection (below 32 °C) |
+| `collar_wear` | Collar-off detection (below 32 °C and no skin contact) |
 
 ### 6.5 Widgets, theme and languages
 - `widgets/collar_status_bar.dart`: how fresh the last reading is ("2 min ago") and battery.
@@ -411,7 +412,8 @@ baseline = (n × own_mean + 30 × population_value) / (n + 30)
   Health screen asks *"What is Bobby doing?"* (playing, resting, scared, just ate, not sure) and shows
   advice for the answer. A spike while *resting* is treated as most serious. The answer is saved to the
   journal and on the reading (`ownerContext`), so it can later be used as an ML label.
-- **Collar-off detection:** temperature below 32 °C means the probe reads room air. The app shows a banner
+- **Collar-off detection:** temperature below 32 °C **and** no skin contact on the heart-rate sensor
+  (the collar sends `skinContact`, true when the sensor's IR level is above 50,000) means it is not worn. The app shows a banner
   and pauses alerts, and the server ignores those readings for alerts and baselines.
 - **Why this status?:** lists each measurement against the pet's baseline or limit (e.g. "100 bpm, +43 %
   vs Bobby's normal (70 bpm)"), plus the ML result and confidence: *explainable* alerts.

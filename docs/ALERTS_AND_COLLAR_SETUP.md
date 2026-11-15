@@ -143,7 +143,7 @@ Deploy the functions again after pulling (`firebase deploy --only functions`).
   e.g. "Bobby's day: 45 of 60 active minutes, resting heart rate 72 bpm, normal for Bobby, no alerts."
   It is not saved to the alert history. Owners can turn it off in Notification settings ("Daily summary").
   The first deploy asks to enable the Cloud Scheduler API; answer yes.
-- **Collar off the pet:** a reading below 32 °C is treated as room air. It raises no health alerts and is
+- **Collar off the pet:** a reading below 32 °C with no skin contact on the heart-rate sensor is treated as room air. It raises no health alerts and is
   left out of the activity and heart-rate baselines (counted as `offBodyN` in the daily summary).
 - **Active minutes:** readings with more than 150 steps count as active (`activeN`); each reading is 30 s.
   Days before this update have no `activeN`, so their active minutes show as 0.

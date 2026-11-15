@@ -21,6 +21,7 @@ class CollarData {
   final double? accelerometerZ;
   // Blood oxygen (optional, from MAX30102)
   final double? bloodOxygen;
+  final bool? skinContact; // heart-rate sensor touching skin
 
   CollarData({
     this.id,
@@ -40,6 +41,7 @@ class CollarData {
     this.accelerometerY,
     this.accelerometerZ,
     this.bloodOxygen,
+    this.skinContact,
   });
 
   // Converts this reading to a map for Firebase storage
@@ -84,6 +86,7 @@ class CollarData {
       accelerometerY: map['accelerometerY']?.toDouble(),
       accelerometerZ: map['accelerometerZ']?.toDouble(),
       bloodOxygen: map['bloodOxygen']?.toDouble(),
+      skinContact: map['skinContact'] is bool ? map['skinContact'] as bool : null,
     );
   }
 

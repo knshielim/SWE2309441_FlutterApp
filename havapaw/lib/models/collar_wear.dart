@@ -5,8 +5,9 @@ class CollarWear {
   // Below this the temperature probe is reading room air
   static const double offBodyTempC = 32.0;
 
+  // Cold probe and no skin contact on the heart-rate sensor
   static bool isOffBody(CollarData reading) {
     final t = reading.temperature;
-    return t != null && t < offBodyTempC;
+    return t != null && t < offBodyTempC && reading.skinContact != true;
   }
 }

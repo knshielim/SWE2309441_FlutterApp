@@ -55,6 +55,9 @@ void main() {
       expect(CollarWear.isOffBody(_reading(temp: 27.0)), isTrue);
       expect(CollarWear.isOffBody(_reading(temp: 38.4)), isFalse);
       expect(CollarWear.isOffBody(_reading(hr: 80)), isFalse);
+      final touching = CollarData(id: 'r', deviceId: 'x', deviceName: 'x', temperature: 29.3, skinContact: true, timestamp: _now);
+      expect(CollarWear.isOffBody(touching), isFalse);
+      expect(CollarData.fromMap({'temperature': 29.3, 'skinContact': true}, 'id').skinContact, isTrue);
     });
 
     test('off-body readings are left out of daily summaries', () {
