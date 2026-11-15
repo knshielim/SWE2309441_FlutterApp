@@ -1387,13 +1387,12 @@ class _ConnectCollarPrompt extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
-          if (!hasCollarId)
-            ElevatedButton.icon(
+          ElevatedButton.icon(
               onPressed: () {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const CollarConnectionScreen()));
               },
               icon: const Icon(Icons.bluetooth_rounded, size: 18),
-              label: Text('connect_collar'.tr()),
+              label: Text(hasCollarId ? 'reconnect_collar'.tr() : 'connect_collar'.tr()),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: AppColors.primaryTeal,

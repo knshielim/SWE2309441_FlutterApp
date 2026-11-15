@@ -108,6 +108,8 @@ String deviceToken;
 String configBuffer;
 bool provisionPending = false;
 unsigned long lastPostMs = 0;
+// Heart-rate sensor IR level above this means it is touching skin (no contact: about 1,000)
+const uint32_t SKIN_CONTACT_IR = 50000;
 const unsigned long POST_INTERVAL_MS = 30000;   // one upload every 30 s (proposal duty cycle)
 
 void notifyStatus(const String &msg) {
@@ -176,6 +178,7 @@ bool buildReading(String &body) {
     doc["accelerometerZ"] = roundf(s.az * 1000.0f) / 1000.0f;
   }
   if (s.batteryPct >= 0) doc["batteryLevel"] = s.batteryPct;
+  doc["skinContact"] = s.irLevel > SKIN_CONTACT_IR;
 
   if (haveFix && (millis() - lastFixMs) < GPS_MAX_AGE_MS) {
     doc["latitude"] = lastLat;

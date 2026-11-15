@@ -190,7 +190,7 @@
   "bpm": "bpm",
   "celsius": "°C",
   "from_pet_profile": "From pet profile",
-  "latest_reading": "Latest Reading",
+  "latest_reading": "Latest reading",
   "no_watch_data": "No Collar Data",
   "connect_smartwatch_desc": "Go to Settings and use Manual Collar Data to add health metrics here.",
   "medication_name_hint": "e.g. Amoxicillin",
@@ -461,5 +461,7 @@
   "vet_report": "Vet report (PDF)",
   "vet_report_failed": "Could not create the report. Check your connection and try again.",
   "daily_digest": "Daily summary",
-  "daily_digest_desc": "A short summary of your pet's day at 8 pm"
+  "daily_digest_desc": "A short summary of your pet's day at 8 pm",
+  "reconnect_collar": "Pair collar again",
+  "last_5_min": "last 5 min"
 }

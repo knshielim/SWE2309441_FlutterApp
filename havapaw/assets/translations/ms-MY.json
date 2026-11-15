@@ -239,7 +239,7 @@
   "bpm": "bpm",
   "celsius": "°C",
   "from_pet_profile": "Dari profil haiwan",
-  "latest_reading": "Bacaan Terkini",
+  "latest_reading": "Bacaan terkini",
   "no_watch_data": "Tiada Data Kolar",
   "connect_smartwatch_desc": "Pergi ke Tetapan dan gunakan Kemasukan Data Manual untuk menambah metrik kesihatan di sini.",
   "error_loading_medications": "Ralat memuat ubat",
@@ -472,5 +472,7 @@
   "vet_report": "Laporan doktor haiwan (PDF)",
   "vet_report_failed": "Laporan tidak dapat dibuat. Semak sambungan anda dan cuba lagi.",
   "daily_digest": "Ringkasan harian",
-  "daily_digest_desc": "Ringkasan ringkas hari haiwan anda pada 8 malam"
+  "daily_digest_desc": "Ringkasan ringkas hari haiwan anda pada 8 malam",
+  "reconnect_collar": "Pasangkan kolar semula",
+  "last_5_min": "5 min terakhir"
 }

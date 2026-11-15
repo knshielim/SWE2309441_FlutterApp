@@ -77,8 +77,10 @@ is treated as more serious. The answer is saved to the health journal and attach
 turns an alarm into a short interaction, reduces false alarms caused by exercise, and produces labelled
 real data for evaluating the model (playing → active, stressed → stressed).
 
-**Collar-off detection.** If the temperature probe reads below 32 °C, it is measuring room air, so the
-collar is assumed not to be on the pet. The app shows a "collar may not be on [pet]" banner and pauses
+**Collar-off detection.** The collar is assumed not to be on the pet when two signals agree: the
+temperature probe reads below 32 °C (room air), and the heart-rate sensor reports no skin contact (its
+infrared reflection level stays low). Using both avoids false "not worn" warnings when the probe sits
+loosely against the skin in a warm room. The app shows a "collar may not be on [pet]" banner and pauses
 alerts. The server ignores these readings for alerts, activity and heart-rate baselines, so that a collar
 left on a table cannot cause false alerts or distort the pet's baseline.
 

@@ -2,7 +2,7 @@
 // Collar sensors: heart rate, SpO2, temperature, steps, battery
 #include <stdint.h>
 
-static const float    STEP_THRESHOLD_G       = 0.25f;  // |a| must exceed its slow average by this much
+static const float    STEP_THRESHOLD_G       = 0.18f;  // |a| must exceed its slow average by this much
 static const uint32_t MIN_STEP_INTERVAL_MS   = 250;    // ignore peaks closer than this (max ~4 steps/s)
 
 static const int      STEP_WINDOW_MIN        = 5;
