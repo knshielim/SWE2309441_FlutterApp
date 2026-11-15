@@ -429,6 +429,19 @@ void loop() {
     shutdownBle();
   }
 
+  // Every 30 s, say why nothing is being uploaded yet
+  static unsigned long lastWaitMs = 0;
+  bool readyToUpload = !bleOn && WiFi.status() == WL_CONNECTED && !deviceToken.isEmpty();
+  if (!readyToUpload && millis() - lastWaitMs > POST_INTERVAL_MS) {
+    lastWaitMs = millis();
+    Serial.printf("[UPLOAD WAIT] paired=%s wifi=%s bluetooth=%s phones=%u bluetooth_off_in=%lds\n",
+                  deviceToken.isEmpty() ? "no (pair from the app)" : "yes",
+                  WiFi.status() == WL_CONNECTED ? "connected" : "not connected",
+                  bleOn ? "on" : "off",
+                  (unsigned)(bleServer ? bleServer->getConnectedCount() : 0),
+                  bleOffAt == 0 ? -1L : (long)(bleOffAt - millis()) / 1000);
+  }
+
   // Upload every 30 s once Bluetooth is off
   if (!bleOn && WiFi.status() == WL_CONNECTED && !deviceToken.isEmpty() &&
       millis() - lastPostMs > POST_INTERVAL_MS) {
