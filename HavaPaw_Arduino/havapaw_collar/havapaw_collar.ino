@@ -87,8 +87,13 @@ double lastLat = 0, lastLng = 0;
 uint32_t lastFixMs = 0;
 bool haveFix = false;
 
-const unsigned long BLE_ADVERTISE_WINDOW_MS = 300000;  // 5 minutes after boot
-bool bleAdvertisingStopped = false;
+// Bluetooth is only needed for pairing. It is switched off once the collar is online,
+// because Bluetooth and the HTTPS upload do not both fit in the ESP32's memory.
+const unsigned long BLE_PAIRING_WINDOW_MS = 120000;    // after boot, when already paired
+const unsigned long BLE_OFF_AFTER_PAIRING_MS = 10000;  // after new settings, so the app receives WIFI_OK
+bool bleOn = false;
+unsigned long bleOffAt = 0;  // 0 = keep Bluetooth on (not paired yet)
+BLEServer *bleServer = nullptr;
 
 Preferences prefs;
 BLECharacteristic *statusChar = nullptr;
@@ -278,9 +283,11 @@ class ServerCallbacks : public BLEServerCallbacks {
     Serial.println("BLE client connected");
   }
   void onDisconnect(BLEServer *server) override {
-    Serial.println("BLE client disconnected — restart advertising");
-    delay(100);
-    server->startAdvertising();
+    Serial.println("BLE client disconnected");
+    if (bleOn) {
+      delay(100);
+      server->startAdvertising();
+    }
   }
 };
 
@@ -289,6 +296,8 @@ void setupBle() {
   BLEDevice::setMTU(517);  // lets the app send the Wi-Fi settings in larger pieces
   BLEDevice::setPower(ESP_PWR_LVL_N0);  // lower transmit power: less current, fine at room distances
   BLEServer *server = BLEDevice::createServer();
+  bleServer = server;
+  bleOn = true;
   server->setCallbacks(new ServerCallbacks());
 
   BLEService *service = server->createService(SERVICE_UUID);
@@ -317,6 +326,19 @@ void setupBle() {
   advertising->setMinPreferred(0x06);
   BLEDevice::startAdvertising();
   Serial.println("BLE advertising as " + deviceId);
+}
+
+// Frees the Bluetooth memory for uploads. Restart the collar to pair again.
+void shutdownBle() {
+  if (!bleOn) return;
+  BLEDevice::getAdvertising()->stop();
+  statusChar = nullptr;
+  deviceIdChar = nullptr;
+  bleOn = false;
+  bleServer = nullptr;
+  BLEDevice::deinit(true);
+  Serial.printf("Bluetooth off to free memory for uploads (restart the collar to pair again). Free memory %u bytes\n",
+                ESP.getFreeHeap());
 }
 
 void loadSavedConfig() {
@@ -364,6 +386,8 @@ void setup() {
   if (!wifiSsid.isEmpty()) {
     connectWifi();
   }
+  // Already paired: keep Bluetooth on for a short time in case the owner wants to pair again
+  if (!deviceToken.isEmpty()) bleOffAt = BLE_PAIRING_WINDOW_MS;
 }
 
 void updateGps() {
@@ -391,24 +415,23 @@ void loop() {
   return;
 #endif
 
-  // Once paired and online, stop advertising to save power (power-cycle to re-pair).
-  if (!bleAdvertisingStopped && !deviceToken.isEmpty() && WiFi.status() == WL_CONNECTED &&
-      millis() > BLE_ADVERTISE_WINDOW_MS) {
-    BLEDevice::getAdvertising()->stop();
-    bleAdvertisingStopped = true;
-    Serial.println("BLE advertising stopped (provisioned)");
-  }
-
   if (provisionPending) {
-    bleAdvertisingStopped = false;
     provisionPending = false;
     if (connectWifi()) {
-      // Try an immediate sync so the app can confirm FIREBASE_OK
-      postCollarReading();
+      // Give the app time to receive WIFI_OK and disconnect, then switch Bluetooth off
+      bleOffAt = millis() + BLE_OFF_AFTER_PAIRING_MS;
     }
   }
 
-  if (WiFi.status() == WL_CONNECTED && !deviceToken.isEmpty() && millis() - lastPostMs > POST_INTERVAL_MS) {
+  // Paired and online: switch Bluetooth off so the upload has enough memory
+  if (bleOn && bleOffAt != 0 && millis() > bleOffAt && !deviceToken.isEmpty() &&
+      WiFi.status() == WL_CONNECTED && bleServer && bleServer->getConnectedCount() == 0) {
+    shutdownBle();
+  }
+
+  // Upload every 30 s once Bluetooth is off
+  if (!bleOn && WiFi.status() == WL_CONNECTED && !deviceToken.isEmpty() &&
+      millis() - lastPostMs > POST_INTERVAL_MS) {
     lastPostMs = millis();
     postCollarReading();
   }
