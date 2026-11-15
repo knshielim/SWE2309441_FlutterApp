@@ -542,7 +542,28 @@ class _HomeTabState extends State<_HomeTab> {
                                   ],
                                 ),
                               ),
-                            if (collarData == null)
+                            // Paired but no reading yet: the collar is joining Wi-Fi or waiting for valid sensor values
+                            if (collarData == null && pet.collarId.isNotEmpty)
+                              _SectionCard(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Column(
+                                    children: [
+                                      Icon(Icons.hourglass_top_rounded, size: 40, color: AppColors.primaryTeal.withValues(alpha: 0.7)),
+                                      const SizedBox(height: 8),
+                                      Text('waiting_for_collar_data'.tr(),
+                                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slateDark)),
+                                      const SizedBox(height: 4),
+                                      Text('waiting_for_collar_data_desc'.tr(namedArgs: {'petName': pet.name}),
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                                      const SizedBox(height: 6),
+                                      Text(pet.collarId, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            if (collarData == null && pet.collarId.isEmpty)
                               _SectionCard(
                                 child: Padding(
                                   padding: const EdgeInsets.all(20),
