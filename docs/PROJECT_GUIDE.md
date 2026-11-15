@@ -195,9 +195,11 @@ last 5 minutes, and battery %. `SENSOR_DEBUG_PRINT 1` prints a line every 2 s to
   | `…0003…` | status (read/notify) | collar reports `READY`, `WIFI_OK`, `FIREBASE_OK`, errors |
   | `…0004…` | device ID (read) | the app reads the collar's ID |
 
-  After receiving the config the collar saves it, connects to Wi-Fi and immediately uploads one reading
-  so the app can show "FIREBASE_OK". Advertising stops 5 minutes after boot once it is set up (saves
-  power); power-cycle the collar to pair again.
+  After receiving the config the collar saves it, connects to Wi-Fi and reports `WIFI_OK` to the app.
+  **Bluetooth is then switched off** (10 s after pairing, or 2 minutes after boot if it was already
+  paired), because the ESP32 does not have enough memory for Bluetooth and the HTTPS upload at the same
+  time (the TLS handshake failed with "SSL - Memory allocation failed" while Bluetooth was on). Uploads
+  start once Bluetooth is off. Restart the collar to pair it again.
 - **Upload loop:** every 30 s (`POST_INTERVAL_MS`), if heart rate and temperature are valid, it builds
   the JSON (`buildReading()`) and POSTs it with `WiFiClientSecure` + pinned **GTS Root R1/R4**
   certificates. Location is only included if the GPS fix is less than 2 minutes old.
