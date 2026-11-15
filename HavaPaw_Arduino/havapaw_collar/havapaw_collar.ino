@@ -201,9 +201,15 @@ bool postCollarReading() {
   String body;
   if (!buildReading(body)) return false;
 
+  // HTTPS needs about 40 KB of free memory for the TLS handshake
+  Serial.printf("Free memory %u bytes (largest block %u)\n", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+
   WiFiClientSecure client;
   client.setCACert(GOOGLE_ROOT_CAS);
+  client.setHandshakeTimeout(30);  // seconds; the handshake is slower at 80 MHz
   HTTPClient http;
+  http.setConnectTimeout(15000);
+  http.setTimeout(15000);
   http.begin(client, ingestUrl);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("X-Device-Token", deviceToken);
@@ -212,6 +218,11 @@ bool postCollarReading() {
   http.end();
 
   Serial.printf("Ingest POST %d: %s\n", code, resp.c_str());
+  if (code < 0) {
+    char tlsError[128] = "";
+    client.lastError(tlsError, sizeof(tlsError));
+    Serial.printf("  HTTP error: %s | TLS error: %s\n", http.errorToString(code).c_str(), tlsError);
+  }
   if (code >= 200 && code < 300) {
     notifyStatus("FIREBASE_OK");
     return true;
