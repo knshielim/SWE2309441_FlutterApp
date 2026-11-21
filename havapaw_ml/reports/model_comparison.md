@@ -4,11 +4,11 @@ Dataset: 20000 simulated readings from 500 pets. Every model uses the same 5-fol
 
 | Model | Accuracy | Macro F1 | Recall resting | Recall active | Recall stressed | Recall anomaly | Time (s) |
 |---|---|---|---|---|---|---|---|
-| Baseline (majority class) | 39.34% | 0.141 | 1.000 | 0.000 | 0.000 | 0.000 | 0.1 |
-| Logistic Regression | 95.73% | 0.929 | 1.000 | 1.000 | 0.908 | 0.810 | 1.1 |
-| Decision Tree | 97.33% | 0.956 | 0.998 | 1.000 | 0.937 | 0.891 | 0.3 |
-| Random Forest | 98.05% | 0.968 | 1.000 | 1.000 | 0.968 | 0.904 | 4.0 |
-| SVM (RBF) | 97.69% | 0.962 | 1.000 | 1.000 | 0.972 | 0.875 | 2.3 |
+| Baseline (majority class) | 39.34% | 0.141 | 1.000 | 0.000 | 0.000 | 0.000 | 0.2 |
+| Logistic Regression | 95.73% | 0.929 | 1.000 | 1.000 | 0.908 | 0.810 | 1.5 |
+| Decision Tree | 97.33% | 0.956 | 0.998 | 1.000 | 0.937 | 0.891 | 0.7 |
+| Random Forest | 98.05% | 0.968 | 1.000 | 1.000 | 0.968 | 0.904 | 4.8 |
+| SVM (RBF) | 97.69% | 0.962 | 1.000 | 1.000 | 0.972 | 0.875 | 6.1 |
 
 The baseline always predicts the most common class (resting) and still scores 39.34%, so accuracy alone can look better than it is; macro F1 and the per-class recall show how each class is handled.
 
